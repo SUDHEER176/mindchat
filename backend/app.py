@@ -16,10 +16,12 @@ except Exception:
 
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_anthropic import ChatAnthropic
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
 except Exception:
     ChatGoogleGenerativeAI = None
+    ChatAnthropic = None
     ChatPromptTemplate = None
     StrOutputParser = None
 
@@ -120,22 +122,34 @@ class ModelManager:
         ]
 
     def _init_langchain(self):
-        # Use GEMINI_API_KEY
-        api_key = os.environ.get("GEMINI_API_KEY")
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            self.langchain_error = "GEMINI_API_KEY not set"
+            self.langchain_error = "API key not set"
             return
-        if not ChatGoogleGenerativeAI:
-            self.langchain_error = "LangChain Google GenAI dependencies not installed"
-            return
+        
         try:
-            self.langchain_chat = ChatGoogleGenerativeAI(
-                model=self.gemini_model_name,
-                temperature=0.6,
-                google_api_key=api_key,
-                max_retries=1, # Prevent 60-second backoff hangs on rate limits
-                timeout=10.0,  # Prevent infinite hangs
-            )
+            if api_key.startswith("sk-ant-"):
+                if not ChatAnthropic:
+                    self.langchain_error = "Langchain Anthropic dependencies not installed"
+                    return
+                self.langchain_chat = ChatAnthropic(
+                    model="claude-3-haiku-20240307",
+                    temperature=0.6,
+                    api_key=api_key,
+                    max_retries=1,
+                    timeout=10.0,
+                )
+            else:
+                if not ChatGoogleGenerativeAI:
+                    self.langchain_error = "Langchain Google GenAI dependencies not installed"
+                    return
+                self.langchain_chat = ChatGoogleGenerativeAI(
+                    model=self.gemini_model_name,
+                    temperature=0.6,
+                    google_api_key=api_key,
+                    max_retries=1,
+                    timeout=10.0,
+                )
         except Exception as e:
             self.langchain_chat = None
             self.langchain_error = str(e)
