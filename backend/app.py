@@ -133,6 +133,8 @@ class ModelManager:
                 model=self.gemini_model_name,
                 temperature=0.6,
                 google_api_key=api_key,
+                max_retries=1, # Prevent 60-second backoff hangs on rate limits
+                timeout=10.0,  # Prevent infinite hangs
             )
         except Exception as e:
             self.langchain_chat = None
@@ -516,7 +518,10 @@ def chat_stream():
             yield f"data: {json.dumps({'type': 'chunk', 'text': safety_result['response']})}\n\n"
             yield "data: [DONE]\n\n"
         model_manager._store_turn(session_id, "assistant", safety_result['response'])
-        return Response(safety_gen(), mimetype='text/event-stream')
+        response = Response(safety_gen(), mimetype='text/event-stream')
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['X-Accel-Buffering'] = 'no'
+        return response
 
     # 3. Detect emotion using ML or Heuristics
     ml_result = None
@@ -558,14 +563,25 @@ def chat_stream():
                     yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
                     time.sleep(0.01) # Small pause to flush SSE buffer over WSGI securely
         except Exception as e:
-            err_msg = f" (Error: {str(e)})"
-            full_response += err_msg
-            yield f"data: {json.dumps({'type': 'chunk', 'text': err_msg})}\n\n"
+            if not full_response:
+                fallback_msg = ml_result.get("response", "I hear you, and I am here to listen.")
+                model_manager._store_turn(session_id, "assistant", fallback_msg)
+                yield f"data: {json.dumps({'type': 'chunk', 'text': fallback_msg})}\n\n"
+            else:
+                err_msg = " [Gemini API rate limit reached, switched to offline mode]"
+                full_response += err_msg
+                model_manager._store_turn(session_id, "assistant", full_response)
+                yield f"data: {json.dumps({'type': 'chunk', 'text': err_msg})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
 
         model_manager._store_turn(session_id, "assistant", full_response)
         yield "data: [DONE]\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    response = Response(generate(), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
 
 @app.route('/models', methods=['GET'])
 def models_status():
