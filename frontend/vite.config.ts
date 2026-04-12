@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     proxy: {
       "/auth": {
-        target: "http://127.0.0.1:5000",
+        target: "https://mindchat-5.onrender.com",
         changeOrigin: true,
       },
     },

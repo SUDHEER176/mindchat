@@ -82,7 +82,7 @@ export async function analyzeAndRespond(message: string): Promise<EmotionResult>
       sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       localStorage.setItem("mindful_chat_session_id", sessionId);
     }
-    const response = await fetch('http://127.0.0.1:5000/chat', {
+    const response = await fetch('https://mindchat-5.onrender.com/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, session_id: sessionId }),
@@ -106,7 +106,7 @@ export async function streamAnalyzeAndRespond(
   }
 
   try {
-    const response = await fetch('http://127.0.0.1:5000/chat_stream', {
+    const response = await fetch('https://mindchat-5.onrender.com/chat_stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, session_id: sessionId }),
