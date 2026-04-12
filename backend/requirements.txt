@@ -1,0 +1,15 @@
+flask
+flask-cors
+google-generativeai
+scikit-learn
+torch
+transformers
+pandas
+numpy
+joblib
+twilio
+requests
+langchain
+langchain-google-genai
+langchain-anthropic
+python-dotenv
