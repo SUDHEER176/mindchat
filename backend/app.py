@@ -1048,20 +1048,32 @@ def verify_otp():
     except Exception as e:
         return jsonify({'error': 'exception creating user', 'detail': str(e)}), 500
 
-@app.route('/analyze-face', methods=['POST'])
+@app.route('/analyze-face', methods=['POST', 'OPTIONS'])
 def analyze_face():
     """
     Accepts a base64 image from the frontend camera and returns
     the detected facial emotion using DeepFace.
     """
+    if request.method == 'OPTIONS':
+        # Preflight request (required for cross-origin JSON POST from the frontend)
+        response = Response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 204
+
     if not DEEPFACE_AVAILABLE:
-        return jsonify({'error': 'DeepFace not available on this server.'}), 503
+        resp = jsonify({'error': 'DeepFace not available on this server.'})
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp, 503
 
     data = request.json or {}
     image_data = data.get('image')  # expects: "data:image/jpeg;base64,..."
 
     if not image_data:
-        return jsonify({'error': 'No image provided'}), 400
+        resp = jsonify({'error': 'No image provided'})
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp, 400
 
     try:
         import traceback
@@ -1075,7 +1087,9 @@ def analyze_face():
         frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         if frame is None:
-            return jsonify({'error': 'Could not decode image'}), 400
+            resp = jsonify({'error': 'Could not decode image'})
+            resp.headers['Access-Control-Allow-Origin'] = '*'
+            return resp, 400
 
         # Analyze with DeepFace
         # We try RetinaFace first as it's most robust, then OpenCV, then skip
@@ -1132,13 +1146,15 @@ def analyze_face():
         confidence = float(emotion_scores.get(dominant_emotion, 0))
         all_scores = {str(k): float(v) for k, v in emotion_scores.items()}
 
-        return jsonify({
+        resp = jsonify({
             'emotion': mapped['label'],
             'emoji': mapped['emoji'],
             'raw': str(dominant_emotion),
             'confidence': round(confidence, 1),
             'all_scores': {k: round(v, 1) for k, v in all_scores.items()}
         })
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
 
     except Exception as e:
         import traceback
@@ -1147,10 +1163,12 @@ def analyze_face():
         traceback.print_exc()
         print("----------------------\n")
         # Return a more descriptive error if possible
-        return jsonify({
+        resp = jsonify({
             'error': f'Analysis failed: {error_msg}',
             'suggestion': 'Check if your internet connection is stable (to download models) and if the image is clear.'
-        }), 500
+        })
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp, 500
 
 
 if __name__ == '__main__':
