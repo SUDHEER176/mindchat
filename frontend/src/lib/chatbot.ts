@@ -4,6 +4,16 @@ type EmotionResult = {
   response: string;
 };
 
+const ENV_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL?.toString()?.replace(/\/+$/, "");
+const DEFAULT_PROD_API_BASE_URL = "https://mindchat-3.onrender.com";
+const DEFAULT_DEV_API_BASE_URL = "http://127.0.0.1:5000";
+
+const API_BASE_URL =
+  ENV_API_BASE_URL ||
+  (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? DEFAULT_DEV_API_BASE_URL
+    : DEFAULT_PROD_API_BASE_URL);
+
 const emotionPatterns: { keywords: string[]; emotion: string; emoji: string; responses: string[] }[] = [
   {
     keywords: ["stressed", "stress", "overwhelmed", "pressure", "burnout", "exhausted"],
@@ -82,7 +92,7 @@ export async function analyzeAndRespond(message: string, detectedEmotion?: strin
       sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       localStorage.setItem("mindful_chat_session_id", sessionId);
     }
-    const response = await fetch('http://127.0.0.1:5000/chat', {
+    const response = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, session_id: sessionId, detected_emotion: detectedEmotion }),
@@ -107,7 +117,7 @@ export async function streamAnalyzeAndRespond(
   }
 
   try {
-    const response = await fetch('http://127.0.0.1:5000/chat_stream', {
+    const response = await fetch(`${API_BASE_URL}/chat_stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, session_id: sessionId, detected_emotion: detectedEmotion }),
