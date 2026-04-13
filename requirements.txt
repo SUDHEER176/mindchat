@@ -16,7 +16,7 @@ langchain-cohere
 langchain-huggingface
 python-dotenv
 gunicorn
-tensorflow-cpu
+tensorflow
 deepface
 opencv-python-headless
 tf-keras
