@@ -133,6 +133,53 @@ class ModelManager:
         self._init_github_models()
         self._init_huggingface()
 
+    def _non_mental_health_redirect(self, raw_message: str):
+        """
+        Hard guardrail: this app is a mental-wellness supporter, not a coding/ML tutor.
+        If the user asks for code/tutorials/debugging, redirect to feelings + support.
+        """
+        text = " ".join((raw_message or "").lower().split())
+        if not text:
+            return None
+
+        tech_keywords = [
+            "pytorch", "tensorflow", "keras", "sklearn", "scikit", "pandas", "numpy",
+            "python", "java", "javascript", "typescript", "react", "node", "flask", "django",
+            "api", "backend", "frontend", "docker", "kubernetes", "sql", "database",
+            "model training", "train a model", "ml model", "machine learning", "deep learning",
+            "error", "stack trace", "exception", "failed to build", "build failed",
+            "sms detection", "spam detection", "spam classifier", "classification",
+        ]
+        code_request_markers = [
+            "give code", "give a code", "give ml code", "ml code", "sample code", "code snippet", "example code",
+            "write a program", "write code", "implement", "how to code", "tutorial",
+            "can you debug", "fix my code", "show me code", "mnist", "cnn", "rnn",
+        ]
+        looks_like_code_block = ("```" in raw_message) or ("import " in text) or ("def " in text) or ("class " in text)
+
+        # Catch broad "code" asks even without specific keywords
+        asks_for_code = (" code" in text) or text.startswith("code ") or text.endswith(" code")
+        is_tech = (
+            any(k in text for k in tech_keywords)
+            or any(k in text for k in code_request_markers)
+            or looks_like_code_block
+            or asks_for_code
+        )
+        if not is_tech:
+            return None
+
+        # Keep it short, supportive, and explicitly refuse code.
+        return {
+            "emotion": "Neutral",
+            "emoji": "🤝",
+            "response": (
+                "I’m here as a mental-wellness supporter, so I can’t help with coding, ML tutorials, or project implementation. "
+                "If this project is stressing you out, I can help you work through the frustration or pressure—what’s feeling hardest right now?"
+            ),
+            "model": "scope-guardrail",
+            "confidence": 1.0,
+        }
+
     def _init_openai(self):
         openai_key = os.environ.get("OPENAI_API_KEY")
         if openai_key:
@@ -500,6 +547,12 @@ class ModelManager:
         message = raw_message.lower().strip()
         self._store_turn(session_id, "user", raw_message)
 
+        # Scope guardrail: redirect non-mental-health (coding/ML) requests
+        redirect = self._non_mental_health_redirect(raw_message)
+        if redirect:
+            self._store_turn(session_id, "assistant", redirect.get("response", ""))
+            return redirect
+
         # 0. If an emotion was detected externally (e.g. via Camera), prioritize it!
         external_ml_result = None
         if detected_emotion:
@@ -770,6 +823,23 @@ def chat_stream():
 
     # 1. Store user message
     model_manager._store_turn(session_id, "user", raw_message)
+
+    # Scope guardrail: redirect non-mental-health (coding/ML) requests (stream-safe)
+    redirect = model_manager._non_mental_health_redirect(raw_message)
+    if redirect:
+        import json
+        def redirect_gen():
+            yield f"data: {json.dumps({'type': 'meta', 'emotion': redirect['emotion'], 'emoji': redirect['emoji']})}\n\n"
+            yield f"data: {json.dumps({'type': 'chunk', 'text': redirect['response']})}\n\n"
+            yield "data: [DONE]\n\n"
+        model_manager._store_turn(session_id, "assistant", redirect.get("response", ""))
+        response = Response(redirect_gen(), mimetype='text/event-stream')
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['X-Accel-Buffering'] = 'no'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
 
     # 2. Check safety
     safety_result = model_manager._safety_override(raw_message)
