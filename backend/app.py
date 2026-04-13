@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import random
 import os
@@ -11,19 +11,17 @@ from collections import defaultdict, deque
 
 try:
     from dotenv import load_dotenv
+    from langchain_openai import ChatOpenAI
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
 except Exception:
     load_dotenv = None
 
 try:
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    from langchain_anthropic import ChatAnthropic
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.output_parsers import StrOutputParser
-except Exception:
-    ChatGoogleGenerativeAI = None
-    ChatAnthropic = None
-    ChatPromptTemplate = None
-    StrOutputParser = None
+    IMPORT_ERROR = None
+except Exception as e:
+    print(f"[Import] Critical Error: {e}")
+    IMPORT_ERROR = str(e)
 
 # Optional: Twilio for SMS
 try:
@@ -68,19 +66,29 @@ class ModelManager:
         self.negative_text_keywords = [
             "depressed", "depression", "sad", "hopeless", "upset", "lonely", "breakup", "anxious", "stress"
         ]
-        self.langchain_chat = None
-        self.langchain_error = None
-        self.gemini_model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-        self._init_langchain()
-        # Backward compatible: if you still have GEMINI_ONLY set, reuse it.
-        self.llm_only = (
-            os.environ.get("LLM_ONLY") or os.environ.get("GEMINI_ONLY") or "true"
-        ).strip().lower() == "true"
-
-        # Retry/backoff knobs for rate-limit/quota issues (best-effort).
-        self.llm_max_retries = int(os.environ.get("LLM_MAX_RETRIES", "2"))
-        self.llm_retry_base_delay_s = float(os.environ.get("LLM_RETRY_BASE_DELAY_S", "1.0"))
-        self.llm_retry_max_delay_s = float(os.environ.get("LLM_RETRY_MAX_DELAY_S", "20.0"))
+        self.keyword_emotion_map = [
+            # Sadness/Depression
+            (["so sad", "feeling sad", "feel sad", "i am sad", "i'm sad", "im sad", "very sad", "depressed", "depression", "feel down", "feeling down", "feel empty", "feel hopeless", "cant stop crying", "feel like crying", "not good", "not well", "feeling bad", "feel bad", "bad day", "worst day", "breakup", "break up", "broken heart", "heartbroken", "split up", "relationship ended", "dumped", "lonely"], "Sadness"),
+            # Anxiety
+            (["anxious", "anxiety", "feel anxious", "i feel anxious", "so anxious", "panic", "panicking", "panicked", "nervous", "worried", "worrying", "fear", "scared", "stressed out", "freaking out", "on edge", "cant breathe"], "Anxiety"),
+            # Stress
+            (["stressed", "so stressed", "overwhelmed", "too much pressure", "under pressure", "burned out", "burnout", "exhausted from", "cant take it", "too much work"], "Stress"),
+            # Anger
+            (["so angry", "feel angry", "rage", "furious", "pissed off", "hate everything", "hate everyone", "really angry", "frustrated"], "Anger"),
+            # Happiness
+            (["feel happy", "feeling happy", "so happy", "great day", "amazing day", "wonderful", "blessed", "joy", "excited", "good day", "glad", "awesome"], "Happiness"),
+            # Grief / Relationship
+            (["breakup", "break up", "split up", "relationship ended", "divorce", "lost him", "lost her", "broken heart"], "Grief"),
+        ]
+        self.emotion_emoji_map = {
+            "Anxiety": "😰",
+            "Sadness": "😢",
+            "Happiness": "🌟",
+            "Stress": "😫",
+            "Anger": "😠",
+            "Grief": "💔",
+            "Neutral": "😐"
+        }
         self.normal_followups = [
             "I'm here with you. Want to tell me what happened today?",
             "Of course. We can talk as long as you need. What's on your mind right now?",
@@ -107,6 +115,54 @@ class ModelManager:
         self._last_reply_by_bucket = {}
         self.memory_turns = 6
         self.conversation_memory = defaultdict(lambda: deque(maxlen=self.memory_turns))
+        self.openai_chat = None
+        self.github_chat = None
+        self._init_openai()
+        self._init_github_models()
+        self._init_huggingface()
+
+    def _init_openai(self):
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+            try:
+                print("[OpenAI] Initializing GPT-4o...")
+                self.openai_chat = ChatOpenAI(
+                    model="gpt-4o",
+                    api_key=openai_key,
+                    temperature=0.7,
+                    timeout=5
+                )
+                print("[OpenAI] Initialized successfully.")
+            except:
+                self.openai_chat = None
+
+    def _init_github_models(self):
+        # GitHub PAT used as an API key for GitHub Models
+        github_token = os.environ.get("GITHUB_PAT")
+        if github_token:
+            try:
+                print("[GitHub Models] Initializing GPT-4o...")
+                self.github_chat = ChatOpenAI(
+                    base_url="https://models.inference.ai.azure.com",
+                    api_key=github_token,
+                    model="gpt-4o",
+                    temperature=0.7,
+                    timeout=5
+                )
+                print("[GitHub Models] Initialized successfully.")
+            except Exception as e:
+                print(f"[GitHub Models] Init failed: {e}")
+                self.github_chat = None
+
+    def _init_huggingface(self):
+        hf_key = os.environ.get("HUGGINGFACE_API_KEY")
+        hf_model = os.environ.get("HUGGINGFACE_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+        if hf_key:
+             # Direct API mode - no LangChain init needed for this
+             print(f"[HuggingFace] Ready using model: {hf_model}")
+             self.hf_ready = True
+        else:
+             self.hf_ready = False
         self.crisis_keywords = [
             "i want to die",
             "want to die",
@@ -119,40 +175,12 @@ class ModelManager:
             "self-harm",
             "don't want to live",
             "dont want to live",
+            "hit someone",
+            "hit some one",
+            "fight someone",
+            "punch someone",
+            "hurt someone"
         ]
-
-    def _init_langchain(self):
-        api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            self.langchain_error = "API key not set"
-            return
-        
-        try:
-            if api_key.startswith("sk-ant-"):
-                if not ChatAnthropic:
-                    self.langchain_error = "Langchain Anthropic dependencies not installed"
-                    return
-                self.langchain_chat = ChatAnthropic(
-                    model="claude-3-haiku-20240307",
-                    temperature=0.6,
-                    api_key=api_key,
-                    max_retries=1,
-                    timeout=10.0,
-                )
-            else:
-                if not ChatGoogleGenerativeAI:
-                    self.langchain_error = "Langchain Google GenAI dependencies not installed"
-                    return
-                self.langchain_chat = ChatGoogleGenerativeAI(
-                    model=self.gemini_model_name,
-                    temperature=0.6,
-                    google_api_key=api_key,
-                    max_retries=1,
-                    timeout=10.0,
-                )
-        except Exception as e:
-            self.langchain_chat = None
-            self.langchain_error = str(e)
 
     def _load_ml_artifacts(self):
         model_path = os.path.join(self.base_dir, "mental_health_model (1).pkl")
@@ -171,18 +199,43 @@ class ModelManager:
             self.label_encoder = None
             self.ml_model_error = str(e)
 
-    def _predict_with_ml(self, message, session_id="default"):
-        if not self.ml_model:
-            return None
+    def _keyword_emotion_override(self, message):
+        """Fast, reliable keyword-based emotion detection that overrides the ML model."""
+        compact = " ".join(message.lower().split())
+        for keywords, emotion in self.keyword_emotion_map:
+            if any(k in compact for k in keywords):
+                return emotion
+        return None
 
-        raw_pred = self.ml_model.predict([message])[0]
-        if self.label_encoder is not None:
+    def _predict_with_ml(self, message, session_id="default"):
+        # Step 1: Try fast keyword override FIRST — it's more reliable than ML for clear cases
+        keyword_emotion = self._keyword_emotion_override(message)
+
+        if self.ml_model:
             try:
-                emotion = self.label_encoder.inverse_transform([raw_pred])[0]
-            except Exception:
-                emotion = str(raw_pred)
+                raw_pred = self.ml_model.predict([message])[0]
+                if self.label_encoder is not None:
+                    try:
+                        ml_emotion = self.label_encoder.inverse_transform([raw_pred])[0]
+                    except Exception:
+                        ml_emotion = str(raw_pred)
+                else:
+                    ml_emotion = str(raw_pred)
+            except Exception as e:
+                print(f"ML predict error: {e}")
+                ml_emotion = "Normal"
         else:
-            emotion = str(raw_pred)
+            ml_emotion = "Normal"
+            return None  # No ML model — let heuristic handle it fully
+
+        # Step 2: Use keyword override when ML says Normal but keywords say otherwise
+        normalized_ml = ml_emotion.strip().lower()
+        if keyword_emotion and normalized_ml in self.generic_labels:
+            emotion_text = keyword_emotion
+            normalized_emotion = keyword_emotion.lower()
+        else:
+            emotion_text = str(ml_emotion)
+            normalized_emotion = normalized_ml
 
         confidence = None
         try:
@@ -192,16 +245,33 @@ class ModelManager:
         except Exception:
             confidence = None
 
-        emotion_text = str(emotion)
-        normalized_emotion = emotion_text.strip().lower()
         compact = " ".join(message.lower().split())
 
-        # Guardrail: avoid clearly contradictory labels (e.g., "I feel happy" -> Depression).
+        # Guardrail: Name introductions should not be classified as mental health issues
+        is_name_intro = any(prefix in compact for prefix in ["my name", "i am ", "i'm ", "name is ", "call me "]) or len(message.split()) <= 2
+        emotion_keywords = ["sad", "happy", "anxious", "stress", "depress", "angry", "kill", "die"]
+        has_emotion_word = any(k in compact for k in emotion_keywords)
+
+        if is_name_intro and not has_emotion_word and normalized_emotion in self.negative_labels:
+            emotion_text = "Neutral"
+            normalized_emotion = "neutral"
+
         has_positive_signal = any(k in compact for k in self.positive_text_keywords)
         has_negative_signal = any(k in compact for k in self.negative_text_keywords)
         if has_positive_signal and normalized_emotion in self.negative_labels and not has_negative_signal:
             emotion_text = "Happiness"
             normalized_emotion = "happiness"
+
+        # --- SMART EDUCATIONAL OVERRIDE ---
+        edu_resp = self._get_educational_response(message)
+        if edu_resp:
+            return {
+                "emotion": "Neutral",
+                "emoji": "📚",
+                "response": edu_resp,
+                "model": "offline-edu",
+                "confidence": 1.0
+            }
 
         response_text = self._build_response_text(message, normalized_emotion, emotion_text, session_id)
         return {
@@ -212,29 +282,74 @@ class ModelManager:
             "confidence": confidence
         }
 
+    def _get_educational_response(self, message):
+        """Provides expert-style static responses for common questions without an LLM."""
+        msg = message.lower()
+        if "difference" in msg or "vs" in msg or "between" in msg:
+            if "sadness" in msg and "depression" in msg:
+                return "Great question. Sadness is usually a temporary reaction to a specific event (like a bad day), while depression is a persistent low mood that lasts for weeks and affects your ability to function daily. Would you like to check your symptoms?"
+            if "anxiety" in msg and "stress" in msg:
+                return "Stress is usually a response to an external pressure (like a deadline), whereas anxiety is an internal reaction that persists even after the stressor is gone. Do you feel like you're experiencing one of these right now?"
+        
+        if "what is" in msg or "define" in msg:
+            if "depression" in msg: return "Depression is more than just feeling blue; it's a medical condition that affects how you feel, think, and handle daily activities. It’s very treatable, though!"
+            if "anxiety" in msg: return "Anxiety is your body's natural response to stress. It’s a feeling of fear or apprehension about what’s to come. If it becomes overwhelming, it helps to talk about it."
+        
+        return None
+
     def _build_response_text(self, message, normalized_emotion, emotion_text, session_id="default"):
+        # Use the JSON-powered heuristic model for dataset-backed responses
+        analysis = self.heuristic_model.analyze(message)
+        heuristic_response = analysis.get("response", "") if analysis else ""
+        
+        # Weak/default or overly upbeat responses that shouldn't pair with negative emotions
+        weak_responses = ["here to listen", "i'm listening", "please go on", "not sure i understand", "absolutely", "and then?", "tell me more"]
+        is_weak = any(weak in heuristic_response.lower() for weak in weak_responses)
+        
+        # If it's a negative emotion, we don't want upbeat responses from the heuristic
+        is_mismatch = normalized_emotion in self.negative_labels and any(upbeat in heuristic_response.lower() for upbeat in ["absolutely", "great", "wonderful", "perfect"])
+        
+        if heuristic_response and not is_weak and not is_mismatch:
+            return heuristic_response
+
+        # Fallback: use emotion-specific replies
+        if normalized_emotion == "grief":
+             return "I'm so sorry you're going through a loss right now. Relationship endings or losses are incredibly painful. I'm here to listen to whatever you're feeling."
+        
+        if normalized_emotion == "sadness":
+             return "I'm so sorry to hear you're going through a tough time with this. It's completely okay to feel sad or overwhelmed right now. Do you want to share more about what happened?"
+        
+        if normalized_emotion in self.negative_labels:
+            label = emotion_text.lower()
+            return f"I hear you. It sounds like you're dealing with {label} right now and it's completely understandable to feel this way. Would you like to talk more about it?"
+
         compact = " ".join(message.lower().split())
-        recent_context = self._get_recent_context(session_id).lower()
+        
+        # Humanize the final text before returning
+        humanized = self._humanize_response(heuristic_response, normalized_emotion)
+        return humanized
 
-        if any(k in compact for k in self.advice_keywords):
-            return self._pick_non_repeating("study_advice", self.study_advice_followups)
+    def _humanize_response(self, text, emotion):
+        """Converts short/robotic dataset responses into warm, human-sounding ones."""
+        t = text.strip()
+        
+        # 1. If the response is extremely short or generic, provide a high-quality replacement
+        generic_trash = ["and?", "and", "anything else?", "continue", "go on", "i see", "ok", "okay"]
+        if t.lower() in generic_trash or len(t.split()) < 3:
+            if emotion == "sadness":
+                return "I'm really listening. Please, tell me more about what's making you feel this way—I'm here to support you."
+            if emotion == "anxiety":
+                return "It's okay to take your time. What specifically is making you feel anxious or worried right now?"
+            if emotion == "stress":
+                return "That sounds like a lot to carry. Want to talk about what's adding to your stress today?"
+            return "I'm here with you. Please, tell me more about what's on your mind."
 
-        if any(k in compact for k in self.study_keywords):
-            return self._pick_non_repeating("study_advice", self.study_advice_followups)
+        # 2. If it's a negative emotion but the response is too cold, add a warm intro
+        if emotion in self.negative_labels and not any(warm in t.lower() for warm in ["sorry", "understand", "hear you", "difficult"]):
+             prefixes = ["I hear you, and I'm sorry you're going through this. ", "That sounds really tough. ", "I can tell this is weighing on you. "]
+             return random.choice(prefixes) + t
 
-        if "study" in recent_context and any(k in compact for k in self.talk_request_keywords):
-            return self._pick_non_repeating("study_advice", self.study_advice_followups)
-
-        if any(k in compact for k in self.talk_request_keywords):
-            return self._pick_non_repeating("normal_followup", self.normal_followups)
-
-        if compact in self.greeting_keywords:
-            return "Hey! I am glad you reached out. How has your day been so far?"
-
-        if normalized_emotion in self.generic_labels:
-            return self._pick_non_repeating("normal_followup", self.normal_followups)
-
-        return f"I hear you. It sounds like {emotion_text.lower()}. Want to share a little more so I can support you better?"
+        return t
 
     def _pick_non_repeating(self, bucket, choices):
         if not choices:
@@ -337,6 +452,19 @@ class ModelManager:
     def _safety_override(self, message):
         text = " ".join(message.lower().split())
         if any(k in text for k in self.crisis_keywords):
+            # Check specifically for aggression against others
+            if any(k in text for k in ["hit", "fight", "punch", "hurt some", "kill some"]):
+                return {
+                    "emotion": "Aggression",
+                    "emoji": "⚠️",
+                    "response": (
+                        "I hear that you're feeling very frustrated or angry right now. "
+                        "However, I'm here to support your well-being, and I can't encourage any form of physical conflict. "
+                        "Would you like to talk about what's making you feel this way? We can try to find a safer way to express these feelings."
+                    ),
+                    "model": "safety"
+                }
+            
             return {
                 "emotion": "Crisis",
                 "emoji": "🆘",
@@ -352,137 +480,210 @@ class ModelManager:
 
     def get_response(self, message, session_id="default"):
         """
-        Uses an ensemble or priority-based selection to get the most accurate response.
-        Priority: LLM -> ML -> Heuristic
+        DATASET-ONLY MODE: All responses come from MentalHealthChatbotDataset.json
+        and keyword matching. No external APIs are called.
+        Priority: Safety Override -> ML + Keyword Guard -> Heuristic/JSON Dataset
         """
         raw_message = message.strip()
         message = raw_message.lower().strip()
         self._store_turn(session_id, "user", raw_message)
 
+        # 1. Safety override always runs first (crisis / aggression)
         safety_result = self._safety_override(raw_message)
         if safety_result:
             self._store_turn(session_id, "assistant", safety_result.get("response", ""))
             return safety_result
-        
-        # 1. Try to get a high-quality response from LLM if available
-        if self.llm_model:
-            try:
-                # Add real LLM generation logic here
-                pass
-            except Exception as e:
-                print(f"LLM Model error: {e}")
 
-        # 2. ML-based emotion detection
+        # 2. ML classifier (if file loaded) + keyword guardrail
         if self.ml_model:
             try:
                 ml_result = self._predict_with_ml(message, session_id)
                 if ml_result:
-                    llm_text = self._generate_langchain_response(raw_message, ml_result.get("emotion", "Neutral"), session_id)
-                    if llm_text:
-                        ml_result["response"] = llm_text
-                        ml_result["model"] = "ml+langchain"
-                    elif self.llm_only:
-                        error_hint = self.langchain_error or "unknown runtime error"
-                        ml_result["response"] = f"Gemini is not available right now ({error_hint}). Please verify key, quota, and API access."
-                        ml_result["model"] = "gemini_unavailable"
+                    print(f"[Dataset-Only] ML detected: {ml_result.get('emotion')}")
+                    ml_result["model"] = "dataset"
                     self._store_turn(session_id, "assistant", ml_result.get("response", ""))
                     return ml_result
             except Exception as e:
-                print(f"ML Model error: {e}")
+                print(f"ML predict error: {e}")
 
-        # 3. Fallback: Heuristic emotion detection if ML unavailable.
+        # 3. Try Gemini fallback if match is weak, else use pure heuristic/JSON
         result = self.heuristic_model.analyze(message)
-        result["model"] = "heuristic"
-        llm_text = self._generate_langchain_response(raw_message, result.get("emotion", "Neutral"), session_id)
-        if llm_text:
-            result["response"] = llm_text
-            result["model"] = "heuristic+langchain"
-        elif self.llm_only:
-            error_hint = self.langchain_error or "unknown runtime error"
-            result["response"] = f"Gemini is not available right now ({error_hint}). Please verify key, quota, and API access."
-            result["model"] = "gemini_unavailable"
-        self._store_turn(session_id, "assistant", result.get("response", ""))
+        # 1. Attempt GitHub Models (Primary - New!)
+        if self.github_chat:
+            try:
+                recent_turns = self._get_recent_context(session_id)
+                prompt = ChatPromptTemplate.from_messages([
+                    ("system", "You are MindfulChat, an empathetic wellness friend. 1-2 sentences."),
+                    ("human", "Previous context:\n{history}\n\nUser: {message}"),
+                ])
+                chain = prompt | self.github_chat | StrOutputParser()
+                resp = chain.invoke({"history": recent_turns, "message": raw_message})
+                if resp:
+                    result["response"] = resp.strip()
+                    result["model"] = "github-models-gpt4o"
+                    self._store_turn(session_id, "assistant", result["response"])
+                    return result
+            except:
+                pass # Fall to OpenAI
+
+        # 2. Attempt OpenAI (Legacy)
+        if self.openai_chat:
+            try:
+                recent_turns = self._get_recent_context(session_id)
+                prompt = ChatPromptTemplate.from_messages([
+                    ("system", "You are MindfulChat, a world-class empathetic wellness friend. 1-2 sentences."),
+                    ("human", "Recent History:\n{history}\n\nUser: {message}"),
+                ])
+                chain = prompt | self.openai_chat | StrOutputParser()
+                resp = chain.invoke({"history": recent_turns, "message": raw_message})
+                if resp:
+                    result["response"] = resp.strip()
+                    result["model"] = "openai-gpt4o"
+                    self._store_turn(session_id, "assistant", result["response"])
+                    return result
+            except:
+                pass # Fail to HF
+
+        # 2. Attempt Hugging Face (Direct Fallback)
+        hf_key = os.environ.get("HUGGINGFACE_API_KEY")
+        if hf_key:
+            try:
+                hf_model = os.environ.get("HUGGINGFACE_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+                prompt = f"Expert Supporter: You are MindfulChat. Focus on empathy. 1-2 sentences.\n\nUser: {raw_message}\nMindfulChat:"
+                hf_resp = requests.post(
+                    f"https://api-inference.huggingface.co/models/{hf_model}",
+                    headers={"Authorization": f"Bearer {hf_key}"},
+                    json={"inputs": prompt, "parameters": {"max_new_tokens": 150, "return_full_text": False}},
+                    timeout=6
+                )
+                if hf_resp.status_code == 200:
+                    data = hf_resp.json()
+                    text = data[0].get("generated_text", "") if isinstance(data, list) else data.get("generated_text", "")
+                    if text:
+                        clean_text = text.split("MindfulChat:")[-1].strip()
+                        result["response"] = clean_text
+                        result["model"] = "huggingface-direct"
+                        self._store_turn(session_id, "assistant", result["response"])
+                        return result
+            except:
+                pass
+
+        # 3. Dataset Lookup (Instant Fallback)
+        ml_result = self._predict_with_ml(raw_message, session_id)
+        result["emotion"] = ml_result.get("emotion", "Normal")
+        result["response"] = self._humanize_response(ml_result.get("response", "I'm here for you."), result["emotion"])
+        result["model"] = "offline-humanized"
+        self._store_turn(session_id, "assistant", result["response"])
         return result
 
 class HeuristicModel:
-    def __init__(self):
-        self.emotion_patterns = [
-            {"keywords": ["stressed", "overwhelmed", "pressure", "burnout"], "emotion": "Stress", "emoji": "😟", 
-             "responses": ["I can hear that you're feeling stressed. Take a deep breath with me: in for 4, out for 6.", "You're dealing with a lot. What's one small thing you can control right now?"]},
-            {"keywords": ["anxious", "worried", "panic", "fear"], "emotion": "Anxiety", "emoji": "😰", 
-             "responses": ["Anxiety can be really overwhelming. Let's ground ourselves: name 5 things you see.", "I'm here for you. Your feelings are valid — try placing a hand on your heart."]},
-            {"keywords": ["sad", "depressed", "down", "unhappy", "hopeless", "upset", "heartbroken", "breakup", "break up", "broke up", "alone", "lonely", "no friends", "dont have friends", "don't have friends"], "emotion": "Sadness", "emoji": "😢", 
-             "responses": ["I'm sorry you're feeling this way. Would you like to talk about what's on your mind?", "Feeling down is tough, but you aren't alone. I'm here to listen."]},
-            {"keywords": ["happy", "good", "great", "wonderful", "joy"], "emotion": "Happiness", "emoji": "😊", 
-             "responses": ["That's wonderful! Tell me more about what's making you feel this way.", "I'm so glad to hear that! Celebrating the wins matters."]},
-            {"keywords": ["angry", "mad", "frustrated", "furious"], "emotion": "Anger", "emoji": "😠", 
-             "responses": ["It sounds like something is really bothering you. Anger is a natural signal. What triggered this?", "I hear your frustration. Want to talk through what's frustrating you?"]},
-            {"keywords": ["tired", "sleepy", "fatigue", "no energy"], "emotion": "Fatigue", "emoji": "😴", 
-             "responses": ["Rest is so important for your mental health. Have you been able to rest today?", "Your body might be asking you to slow down. Consider a gentle bedtime routine."]},
-        ]
-        self.default_responses = [
-            "Thank you for sharing. How long have you been feeling this way?",
-            "I'm here to listen. Tell me more about what's on your mind.",
-            "I hear you. What would feel most helpful right now?",
-            "I'm listening with no judgment. How's the rest of your day going?",
-        ]
-        self._last_response_by_emotion = {}
+    def __init__(self, dataset_path=None):
+        self.intents = []
+        self.dataset_path = dataset_path or os.path.join(os.path.dirname(__file__), "MentalHealthChatbotDataset.json")
+        self._load_dataset()
+        self._last_response_by_tag = {}
+
+    def _load_dataset(self):
+        try:
+            if os.path.exists(self.dataset_path):
+                import json
+                with open(self.dataset_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.intents = data.get('intents', [])
+                print(f"Loaded {len(self.intents)} intents from dataset.")
+            else:
+                print(f"Dataset not found at {self.dataset_path}, using empty intents.")
+        except Exception as e:
+            print(f"Error loading dataset: {e}")
 
     def analyze(self, message):
-        # If user uses contrast words ("but", "however"), the trailing clause
-        # usually carries the latest emotional state.
-        parts = [message]
-        for splitter in [" but ", " however ", " though "]:
-            if splitter in message:
-                parts = [p.strip() for p in message.split(splitter) if p.strip()]
-        search_texts = list(reversed(parts))
+        message = message.lower().strip()
+        best_tag = None
+        max_score = 0
+        
+        # Simple keyword overlap matching
+        words = set(re.findall(r'\w+', message))
+        
+        for intent in self.intents:
+            tag = intent.get('tag')
+            patterns = intent.get('patterns', [])
+            
+            for pattern in patterns:
+                p_words = set(re.findall(r'\w+', pattern.lower()))
+                if not p_words: continue
+                
+                # Filter out very common filler words from the match calculation
+                filler_words = {"i", "want", "to", "be", "do", "the", "a", "an", "is", "am", "are", "some", "someone", "somebody"}
+                significant_words = words - filler_words
+                significant_p_words = p_words - filler_words
+                
+                if not significant_p_words:
+                    # Fallback for very short patterns like "Hi"
+                    score = len(words.intersection(p_words)) / len(p_words)
+                else:
+                    score = len(significant_words.intersection(significant_p_words)) / len(significant_p_words)
+                
+                # Boost for exact substring matches of the full pattern
+                if pattern.lower() in message:
+                    score += 1.5
+                    
+                if score > max_score:
+                    max_score = score
+                    best_tag = tag
 
-        for text in search_texts:
-            for pattern in self.emotion_patterns:
-                if any(kw in text for kw in pattern["keywords"]):
-                    return {
-                        "emotion": pattern["emotion"],
-                        "emoji": pattern["emoji"],
-                        "response": self._pick_non_repeating_response(pattern["emotion"], pattern["responses"])
-                    }
-
-        for pattern in self.emotion_patterns:
-            if any(kw in message for kw in pattern["keywords"]):
-                return {
-                    "emotion": pattern["emotion"],
-                    "emoji": pattern["emoji"],
-                    "response": self._pick_non_repeating_response(pattern["emotion"], pattern["responses"])
-                }
-        return {
+        res = {
             "emotion": "Neutral",
             "emoji": "🤔",
-            "response": self._pick_non_repeating_response("Neutral", self.default_responses)
+            "response": "I'm here to listen. Tell me more about what's on your mind.",
+            "max_score": max_score
         }
 
-    def _pick_non_repeating_response(self, emotion, choices):
+        if best_tag and max_score > 0.6:
+            intent = next((i for i in self.intents if i['tag'] == best_tag), None)
+            if intent:
+                # Map dataset tags to our internal emotion labels if possible
+                emotion_map = {
+                    "stressed": "Stress",
+                    "sad": "Sadness",
+                    "happy": "Happiness",
+                    "angry": "Anger",
+                    "anxious": "Anxiety",
+                    "neutral-response": "Neutral",
+                    "greeting": "Neutral",
+                    "name": "Neutral"
+                }
+                res.update({
+                    "emotion": emotion_map.get(best_tag, best_tag.capitalize()),
+                    "emoji": self._get_emoji(best_tag),
+                    "response": self._pick_non_repeating_response(best_tag, intent.get('responses', []))
+                })
+        return res
+
+    def _get_emoji(self, tag):
+        emojis = {
+            "stressed": "😟",
+            "sad": "😢",
+            "happy": "😊",
+            "angry": "😠",
+            "anxious": "😰",
+            "help": "🆘",
+            "greeting": "👋",
+            "name": "🤝",
+            "thanks": "🙏",
+            "goodbye": "👋"
+        }
+        return emojis.get(tag, "🤔")
+
+    def _pick_non_repeating_response(self, tag, choices):
         if not choices:
-            return ""
-        last = self._last_response_by_emotion.get(emotion)
+            return "I'm listening."
+        last = self._last_response_by_tag.get(tag)
         candidates = [c for c in choices if c != last]
         picked = random.choice(candidates or choices)
-        self._last_response_by_emotion[emotion] = picked
+        self._last_response_by_tag[tag] = picked
         return picked
 
 model_manager = ModelManager()
-
-# --- Simple OTP store (in-memory). For production, use a persistent store like Redis or DB.
-OTP_STORE = {}  # phone -> {otp, expires}
-
-# Twilio and Supabase config from environment
-TWILIO_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-TWILIO_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
-TWILIO_FROM = os.environ.get('TWILIO_FROM_NUMBER')
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
-SUPABASE_SERVICE_ROLE = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
-
-twilio_client = None
-if TwilioClient and TWILIO_SID and TWILIO_TOKEN:
-    twilio_client = TwilioClient(TWILIO_SID, TWILIO_TOKEN)
 
 # --- API Routes ---
 
@@ -491,7 +692,7 @@ def root():
     return jsonify({
         "status": "ok",
         "service": "mindful-companion-backend",
-        "message": "Backend is running. Use /chat, /chat_stream, /models, /auth/send-otp, /auth/verify-otp"
+        "message": "Backend is running. Use /chat, /chat_stream"
     }), 200
 
 
@@ -509,9 +710,16 @@ def chat():
     result = model_manager.get_response(data['message'], session_id=session_id)
     return jsonify(result)
 
-@app.route('/chat_stream', methods=['POST'])
+@app.route('/chat_stream', methods=['POST', 'OPTIONS'])
 def chat_stream():
-    from flask import Response
+    if request.method == 'OPTIONS':
+        # Preflight request
+        response = Response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 204
+
     import json
     data = request.json
     if not data or 'message' not in data:
@@ -535,12 +743,13 @@ def chat_stream():
         response = Response(safety_gen(), mimetype='text/event-stream')
         response.headers['Cache-Control'] = 'no-cache'
         response.headers['X-Accel-Buffering'] = 'no'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response
 
     # 3. Detect emotion using ML or Heuristics
-    ml_result = None
-    if model_manager.ml_model:
-        ml_result = model_manager._predict_with_ml(message, session_id)
+    ml_result = model_manager._predict_with_ml(message, session_id)
     if not ml_result:
         ml_result = model_manager.heuristic_model.analyze(message)
 
@@ -550,51 +759,93 @@ def chat_stream():
     def generate():
         # Send metadata first
         yield f"data: {json.dumps({'type': 'meta', 'emotion': emotion_text, 'emoji': emoji_text})}\n\n"
+        
+        # 1. Try GitHub Models Stream
+        if model_manager.github_chat:
+            try:
+                recent_turns = model_manager._get_recent_context(session_id)
+                prompt = ChatPromptTemplate.from_messages([
+                    ("system", "You are MindfulChat, an empathetic friend. 1-2 sentences."),
+                    ("human", "History:\n{history}\n\nUser: {message}"),
+                ])
+                chain = prompt | model_manager.github_chat | StrOutputParser()
+                full_resp = ""
+                for chunk in chain.stream({"history": recent_turns, "message": raw_message}):
+                    if chunk:
+                        full_resp += chunk
+                        yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+                yield "data: [DONE]\n\n"
+                model_manager._store_turn(session_id, "assistant", full_resp)
+                return
+            except:
+                pass
 
-        recent_turns = model_manager._get_recent_context(session_id)
-        if not model_manager.langchain_chat:
-            # Fallback to local heuristic response
-            res_text = ml_result.get("response", "I'm here for you.")
-            yield f"data: {json.dumps({'type': 'chunk', 'text': res_text})}\n\n"
-            yield "data: [DONE]\n\n"
-            model_manager._store_turn(session_id, "assistant", res_text)
-            return
+        # 2. Try OpenAI Stream
+        if model_manager.openai_chat:
+            try:
+                recent_turns = model_manager._get_recent_context(session_id)
+                prompt = ChatPromptTemplate.from_messages([
+                    ("system", "You are MindfulChat, a warm world-class empathetic friend. 1-2 sentences."),
+                    ("human", "History:\n{history}\n\nUser: {message}"),
+                ])
+                chain = prompt | model_manager.openai_chat | StrOutputParser()
+                full_resp = ""
+                for chunk in chain.stream({"history": recent_turns, "message": raw_message}):
+                    if chunk:
+                        full_resp += chunk
+                        yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+                yield "data: [DONE]\n\n"
+                model_manager._store_turn(session_id, "assistant", full_resp)
+                return
+            except:
+                pass
 
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain_core.output_parsers import StrOutputParser
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are MindfulChat, a warm and empathetic mental wellness companion. Keep responses supportive, concise (1-3 sentences). Do not diagnose."),
-            ("human", "Recent conversation:\n{history}\n\nUser message: {message}\nDetected emotion: {emotion}\nWrite a natural supportive response."),
-        ])
-        chain = prompt | model_manager.langchain_chat | StrOutputParser()
+        # Try Hugging Face (Direct Fallback)
+        hf_key = os.environ.get("HUGGINGFACE_API_KEY")
+        if hf_key:
+            try:
+                hf_model = os.environ.get("HUGGINGFACE_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+                prompt = f"Expert Supporter: You are MindfulChat. Focus on empathy. 1-2 sentences.\n\nUser: {raw_message}\nMindfulChat:"
+                hf_resp = requests.post(
+                    f"https://api-inference.huggingface.co/models/{hf_model}",
+                    headers={"Authorization": f"Bearer {hf_key}"},
+                    json={"inputs": prompt, "parameters": {"max_new_tokens": 150, "return_full_text": False}},
+                    timeout=6
+                )
+                if hf_resp.status_code == 200:
+                    data = hf_resp.json()
+                    text = data[0].get("generated_text", "") if isinstance(data, list) else data.get("generated_text", "")
+                    if text:
+                        clean_text = text.split("MindfulChat:")[-1].strip()
+                        yield f"data: {json.dumps({'type': 'chunk', 'text': clean_text})}\n\n"
+                        yield "data: [DONE]\n\n"
+                        model_manager._store_turn(session_id, "assistant", clean_text)
+                        return
+            except:
+                pass
 
-        full_response = ""
-        try:
-            import time
-            for chunk in chain.stream({"history": recent_turns, "message": raw_message, "emotion": emotion_text}):
-                if chunk:
-                    full_response += chunk
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
-                    time.sleep(0.01) # Small pause to flush SSE buffer over WSGI securely
-        except Exception as e:
-            if not full_response:
-                fallback_msg = ml_result.get("response", "I hear you, and I am here to listen.")
-                model_manager._store_turn(session_id, "assistant", fallback_msg)
-                yield f"data: {json.dumps({'type': 'chunk', 'text': fallback_msg})}\n\n"
-            else:
-                err_msg = " [Gemini API rate limit reached, switched to offline mode]"
-                full_response += err_msg
-                model_manager._store_turn(session_id, "assistant", full_response)
-                yield f"data: {json.dumps({'type': 'chunk', 'text': err_msg})}\n\n"
-            yield "data: [DONE]\n\n"
-            return
-
-        model_manager._store_turn(session_id, "assistant", full_response)
+        # Dataset Lookup (Fallback)
+        res_text = model_manager._humanize_response(ml_result.get("response", "I'm here for you."), emotion_text)
+        for bit in res_text.split(" "):
+            yield f"data: {json.dumps({'type': 'chunk', 'text': bit + ' '})}\n\n"
+            time.sleep(0.05)
         yield "data: [DONE]\n\n"
+        model_manager._store_turn(session_id, "assistant", res_text)
+
+        # 2. Dataset Lookup (Fallback)
+        res_text = model_manager._humanize_response(ml_result.get("response", "I'm here for you."), emotion_text)
+        for bit in res_text.split(" "):
+            yield f"data: {json.dumps({'type': 'chunk', 'text': bit + ' '})}\n\n"
+            time.sleep(0.05)
+        yield "data: [DONE]\n\n"
+        model_manager._store_turn(session_id, "assistant", res_text)
 
     response = Response(generate(), mimetype='text/event-stream')
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['X-Accel-Buffering'] = 'no'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     return response
 
 @app.route('/models', methods=['GET'])

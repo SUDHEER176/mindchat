@@ -113,11 +113,11 @@ const Chat = () => {
                       : "bg-card text-card-foreground border border-border rounded-bl-md"
                   }`}
                 >
-                  {msg.emotion && (
+                  {/* {msg.emotion && (
                     <span className="inline-block text-xs font-medium bg-primary/10 text-primary rounded-full px-2 py-0.5 mb-2">
                       {msg.emoji} Detected: {msg.emotion}
                     </span>
-                  )}
+                  )} */}
                   <p>{msg.text}</p>
                 </div>
                 {msg.role === "user" && (

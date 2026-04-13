@@ -12,5 +12,9 @@ requests
 langchain
 langchain-google-genai
 langchain-anthropic
+langchain-core
+langchain-openai
+langchain-cohere
+langchain-huggingface
 python-dotenv
 gunicorn
