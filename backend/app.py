@@ -943,5 +943,5 @@ def verify_otp():
         return jsonify({'error': 'exception creating user', 'detail': str(e)}), 500
 
 if __name__ == '__main__':
-    # You can configure the port here (standard is 5000)
-    app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
+    # Force 0.0.0.0 for external visibility (Render/Docker)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
