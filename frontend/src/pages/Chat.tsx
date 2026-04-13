@@ -4,6 +4,7 @@ import { Send, Bot, User, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { streamAnalyzeAndRespond, quickPrompts } from "@/lib/chatbot";
+import FaceScanner from "@/components/FaceScanner";
 
 type Message = {
   id: number;
@@ -23,6 +24,7 @@ const Chat = () => {
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [lastFaceEmotion, setLastFaceEmotion] = useState<{ emotion: string; emoji: string } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -57,13 +59,20 @@ const Chat = () => {
           setMessages((prev) => prev.map(msg => 
             msg.id === botId ? { ...msg, text: msg.text + chunk } : msg
           ));
-        }
+        },
+        lastFaceEmotion?.emotion
       );
       
+      setLastFaceEmotion(null); // Clear after use
       setIsTyping(false);
     };
 
     setTimeout(handleResponse, 100);
+  };
+
+  const handleFaceEmotion = (result: { emotion: string; emoji: string; confidence: number }) => {
+    // Silently store the emotion to be sent with the next user message
+    setLastFaceEmotion({ emotion: result.emotion, emoji: result.emoji });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -176,7 +185,25 @@ const Chat = () => {
 
       {/* Input */}
       <div className="border-t border-border bg-card/50 backdrop-blur-sm px-4 py-4">
+        <div className="container mx-auto max-w-3xl mb-2">
+          {lastFaceEmotion && (
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs font-medium text-primary mb-2"
+            >
+              <span>{lastFaceEmotion.emoji} Focused on: {lastFaceEmotion.emotion}</span>
+              <button 
+                onClick={() => setLastFaceEmotion(null)}
+                className="hover:text-destructive transition-colors ml-1"
+              >
+                ×
+              </button>
+            </motion.div>
+          )}
+        </div>
         <form onSubmit={handleSubmit} className="container mx-auto max-w-3xl flex gap-3">
+          <FaceScanner onEmotionDetected={handleFaceEmotion} apiBase="http://localhost:5000" />
           <Input
             ref={inputRef}
             value={input}

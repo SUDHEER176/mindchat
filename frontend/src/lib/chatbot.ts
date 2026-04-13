@@ -74,7 +74,7 @@ const defaultResponses = [
   "Tell me more — I'm listening with no judgement. How has your day been?",
 ];
 
-export async function analyzeAndRespond(message: string): Promise<EmotionResult> {
+export async function analyzeAndRespond(message: string, detectedEmotion?: string): Promise<EmotionResult> {
   // Keep the original function just in case
   try {
     let sessionId = localStorage.getItem("mindful_chat_session_id");
@@ -85,7 +85,7 @@ export async function analyzeAndRespond(message: string): Promise<EmotionResult>
     const response = await fetch('http://127.0.0.1:5000/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, session_id: sessionId }),
+      body: JSON.stringify({ message, session_id: sessionId, detected_emotion: detectedEmotion }),
     });
     if (!response.ok) throw new Error('Backend response was not ok');
     return await response.json();
@@ -97,7 +97,8 @@ export async function analyzeAndRespond(message: string): Promise<EmotionResult>
 export async function streamAnalyzeAndRespond(
   message: string,
   onMeta: (emotion: string, emoji: string) => void,
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
+  detectedEmotion?: string
 ): Promise<void> {
   let sessionId = localStorage.getItem("mindful_chat_session_id");
   if (!sessionId) {
@@ -109,7 +110,7 @@ export async function streamAnalyzeAndRespond(
     const response = await fetch('http://127.0.0.1:5000/chat_stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, session_id: sessionId }),
+      body: JSON.stringify({ message, session_id: sessionId, detected_emotion: detectedEmotion }),
     });
     
     if (!response.ok || !response.body) {

@@ -29,6 +29,18 @@ try:
 except Exception:
     TwilioClient = None
 
+# DeepFace for Facial Emotion Recognition
+try:
+    import base64
+    import numpy as np
+    import cv2
+    from deepface import DeepFace
+    DEEPFACE_AVAILABLE = True
+    print("[FaceAI] DeepFace loaded successfully.")
+except Exception as e:
+    DEEPFACE_AVAILABLE = False
+    print(f"[FaceAI] DeepFace not available: {e}")
+
 app = Flask(__name__)
 CORS(app)
 
@@ -478,7 +490,7 @@ class ModelManager:
             }
         return None
 
-    def get_response(self, message, session_id="default"):
+    def get_response(self, message, session_id="default", detected_emotion=None):
         """
         DATASET-ONLY MODE: All responses come from MentalHealthChatbotDataset.json
         and keyword matching. No external APIs are called.
@@ -488,11 +500,30 @@ class ModelManager:
         message = raw_message.lower().strip()
         self._store_turn(session_id, "user", raw_message)
 
+        # 0. If an emotion was detected externally (e.g. via Camera), prioritize it!
+        external_ml_result = None
+        if detected_emotion:
+            print(f"[FaceAI] Using externally detected emotion: {detected_emotion}")
+            external_ml_result = {
+                "emotion": detected_emotion,
+                "emoji": self.emotion_emoji_map.get(detected_emotion, "🧠"),
+                "model": "camera-detected"
+            }
+            # Still build response based on this emotion
+            external_ml_result["response"] = self._build_response_text(raw_message, 
+                                                                    detected_emotion.lower(), 
+                                                                    detected_emotion, 
+                                                                    session_id)
+
         # 1. Safety override always runs first (crisis / aggression)
         safety_result = self._safety_override(raw_message)
         if safety_result:
             self._store_turn(session_id, "assistant", safety_result.get("response", ""))
             return safety_result
+
+        # Return external result ONLY if safety is clear AND we are strictly in offline mode (placeholder check)
+        # For now, let's keep it to allow LLMs to use the emotion.
+        pass
 
         # 2. ML classifier (if file loaded) + keyword guardrail
         if self.ml_model:
@@ -514,7 +545,7 @@ class ModelManager:
                 recent_turns = self._get_recent_context(session_id)
                 prompt = ChatPromptTemplate.from_messages([
                     ("system", "You are MindfulChat, an empathetic wellness friend. 1-2 sentences."),
-                    ("human", "Previous context:\n{history}\n\nUser: {message}"),
+                    ("human", f"Previous context:\n{{history}}\n\nUser: {{message}} (Visual Emotion: {detected_emotion if detected_emotion else 'Not detected'})"),
                 ])
                 chain = prompt | self.github_chat | StrOutputParser()
                 resp = chain.invoke({"history": recent_turns, "message": raw_message})
@@ -532,7 +563,7 @@ class ModelManager:
                 recent_turns = self._get_recent_context(session_id)
                 prompt = ChatPromptTemplate.from_messages([
                     ("system", "You are MindfulChat, a world-class empathetic wellness friend. 1-2 sentences."),
-                    ("human", "Recent History:\n{history}\n\nUser: {message}"),
+                    ("human", f"Recent History:\n{{history}}\n\nUser: {{message}} (Visual Emotion: {detected_emotion if detected_emotion else 'Not detected'})"),
                 ])
                 chain = prompt | self.openai_chat | StrOutputParser()
                 resp = chain.invoke({"history": recent_turns, "message": raw_message})
@@ -569,9 +600,16 @@ class ModelManager:
                 pass
 
         # 3. Dataset Lookup (Instant Fallback)
-        ml_result = self._predict_with_ml(raw_message, session_id)
-        result["emotion"] = ml_result.get("emotion", "Normal")
-        result["response"] = self._humanize_response(ml_result.get("response", "I'm here for you."), result["emotion"])
+        if not detected_emotion:
+            ml_result = self._predict_with_ml(raw_message, session_id)
+            result["emotion"] = ml_result.get("emotion", "Normal")
+            result["response"] = self._humanize_response(ml_result.get("response", "I'm here for you."), result["emotion"])
+        else:
+            result["emotion"] = detected_emotion
+            # We already built a response in external_ml_result or can build it here
+            res = self._build_response_text(raw_message, detected_emotion.lower(), detected_emotion, session_id)
+            result["response"] = self._humanize_response(res, detected_emotion)
+        
         result["model"] = "offline-humanized"
         self._store_turn(session_id, "assistant", result["response"])
         return result
@@ -707,7 +745,8 @@ def chat():
         return jsonify({"error": "No message provided"}), 400
 
     session_id = data.get("session_id", "default")
-    result = model_manager.get_response(data['message'], session_id=session_id)
+    detected_emotion = data.get("detected_emotion")
+    result = model_manager.get_response(data['message'], session_id=session_id, detected_emotion=detected_emotion)
     return jsonify(result)
 
 @app.route('/chat_stream', methods=['POST', 'OPTIONS'])
@@ -748,13 +787,18 @@ def chat_stream():
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
         return response
 
-    # 3. Detect emotion using ML or Heuristics
-    ml_result = model_manager._predict_with_ml(message, session_id)
-    if not ml_result:
-        ml_result = model_manager.heuristic_model.analyze(message)
-
-    emotion_text = ml_result.get("emotion", "Neutral")
-    emoji_text = ml_result.get("emoji", "🤔")
+    # 3. Detect emotion using ML or Heuristics (unless provided)
+    detected_emotion = data.get("detected_emotion")
+    if detected_emotion:
+        emotion_text = detected_emotion
+        emoji_text = model_manager.emotion_emoji_map.get(detected_emotion, "🧠")
+        ml_result = {"emotion": emotion_text, "emoji": emoji_text}
+    else:
+        ml_result = model_manager._predict_with_ml(message, session_id)
+        if not ml_result:
+            ml_result = model_manager.heuristic_model.analyze(message)
+        emotion_text = ml_result.get("emotion", "Neutral")
+        emoji_text = ml_result.get("emoji", "🤔")
 
     def generate():
         # Send metadata first
@@ -766,7 +810,7 @@ def chat_stream():
                 recent_turns = model_manager._get_recent_context(session_id)
                 prompt = ChatPromptTemplate.from_messages([
                     ("system", "You are MindfulChat, an empathetic friend. 1-2 sentences."),
-                    ("human", "History:\n{history}\n\nUser: {message}"),
+                    ("human", f"History:\n{{history}}\n\nUser: {{message}} (Visual Emotion: {detected_emotion if detected_emotion else 'Not detected'})"),
                 ])
                 chain = prompt | model_manager.github_chat | StrOutputParser()
                 full_resp = ""
@@ -786,7 +830,7 @@ def chat_stream():
                 recent_turns = model_manager._get_recent_context(session_id)
                 prompt = ChatPromptTemplate.from_messages([
                     ("system", "You are MindfulChat, a warm world-class empathetic friend. 1-2 sentences."),
-                    ("human", "History:\n{history}\n\nUser: {message}"),
+                    ("human", f"History:\n{{history}}\n\nUser: {{message}} (Visual Emotion: {detected_emotion if detected_emotion else 'Not detected'})"),
                 ])
                 chain = prompt | model_manager.openai_chat | StrOutputParser()
                 full_resp = ""
@@ -825,14 +869,6 @@ def chat_stream():
                 pass
 
         # Dataset Lookup (Fallback)
-        res_text = model_manager._humanize_response(ml_result.get("response", "I'm here for you."), emotion_text)
-        for bit in res_text.split(" "):
-            yield f"data: {json.dumps({'type': 'chunk', 'text': bit + ' '})}\n\n"
-            time.sleep(0.05)
-        yield "data: [DONE]\n\n"
-        model_manager._store_turn(session_id, "assistant", res_text)
-
-        # 2. Dataset Lookup (Fallback)
         res_text = model_manager._humanize_response(ml_result.get("response", "I'm here for you."), emotion_text)
         for bit in res_text.split(" "):
             yield f"data: {json.dumps({'type': 'chunk', 'text': bit + ' '})}\n\n"
@@ -941,6 +977,111 @@ def verify_otp():
         return jsonify({'status': 'verified', 'user': user}), 200
     except Exception as e:
         return jsonify({'error': 'exception creating user', 'detail': str(e)}), 500
+
+@app.route('/analyze-face', methods=['POST'])
+def analyze_face():
+    """
+    Accepts a base64 image from the frontend camera and returns
+    the detected facial emotion using DeepFace.
+    """
+    if not DEEPFACE_AVAILABLE:
+        return jsonify({'error': 'DeepFace not available on this server.'}), 503
+
+    data = request.json or {}
+    image_data = data.get('image')  # expects: "data:image/jpeg;base64,..."
+
+    if not image_data:
+        return jsonify({'error': 'No image provided'}), 400
+
+    try:
+        import traceback
+        # Strip the base64 header if present
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+
+        # Decode and convert to OpenCV image
+        img_bytes = base64.b64decode(image_data)
+        np_arr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            return jsonify({'error': 'Could not decode image'}), 400
+
+        # Analyze with DeepFace
+        # We try RetinaFace first as it's most robust, then OpenCV, then skip
+        try:
+            print("[FaceAI] Starting analysis with RetinaFace...")
+            results = DeepFace.analyze(
+                frame,
+                actions=['emotion'],
+                enforce_detection=False,
+                detector_backend='retinaface',
+                align=False,
+                silent=True
+            )
+        except Exception as e1:
+            print(f"[FaceAI] RetinaFace failed: {e1}. Trying OpenCV...")
+            try:
+                results = DeepFace.analyze(
+                    frame,
+                    actions=['emotion'],
+                    enforce_detection=False,
+                    detector_backend='opencv',
+                    align=False,
+                    silent=True
+                )
+            except Exception as e2:
+                print(f"[FaceAI] OpenCV failed: {e2}. Final fallback to 'skip'...")
+                results = DeepFace.analyze(
+                    frame,
+                    actions=['emotion'],
+                    enforce_detection=False,
+                    detector_backend='skip',
+                    silent=True
+                )
+
+        # Handle both single and list results
+        result = results[0] if isinstance(results, list) else results
+        dominant_emotion = result.get('dominant_emotion', 'neutral')
+        emotion_scores = result.get('emotion', {})
+
+        # Map DeepFace emotions to our internal labels
+        # Map DeepFace emotions to our internal labels
+        emotion_map = {
+            'angry':    {'label': 'Anger',    'emoji': '😠'},
+            'disgust':  {'label': 'Anger',    'emoji': '😠'},
+            'fear':     {'label': 'Anxiety',  'emoji': '😰'},
+            'happy':    {'label': 'Happiness','emoji': '🌟'},
+            'sad':      {'label': 'Sadness',  'emoji': '😢'},
+            'surprise': {'label': 'Anxiety',  'emoji': '😮'},
+            'neutral':  {'label': 'Neutral',  'emoji': '😐'},
+        }
+        mapped = emotion_map.get(dominant_emotion, {'label': 'Neutral', 'emoji': '😐'})
+        
+        # Cast to float to avoid "Object of type float32 is not JSON serializable"
+        confidence = float(emotion_scores.get(dominant_emotion, 0))
+        all_scores = {str(k): float(v) for k, v in emotion_scores.items()}
+
+        return jsonify({
+            'emotion': mapped['label'],
+            'emoji': mapped['emoji'],
+            'raw': str(dominant_emotion),
+            'confidence': round(confidence, 1),
+            'all_scores': {k: round(v, 1) for k, v in all_scores.items()}
+        })
+
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        print("\n--- DEEPFACE ERROR ---")
+        traceback.print_exc()
+        print("----------------------\n")
+        # Return a more descriptive error if possible
+        return jsonify({
+            'error': f'Analysis failed: {error_msg}',
+            'suggestion': 'Check if your internet connection is stable (to download models) and if the image is clear.'
+        }), 500
+
 
 if __name__ == '__main__':
     # Force 0.0.0.0 for external visibility (Render/Docker)
