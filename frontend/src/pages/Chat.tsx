@@ -203,7 +203,7 @@ const Chat = () => {
           )}
         </div>
         <form onSubmit={handleSubmit} className="container mx-auto max-w-3xl flex gap-3">
-          <FaceScanner onEmotionDetected={handleFaceEmotion} apiBase="http://localhost:5000" />
+          <FaceScanner onEmotionDetected={handleFaceEmotion} />
           <Input
             ref={inputRef}
             value={input}
