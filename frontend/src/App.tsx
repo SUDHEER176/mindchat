@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import Navbar from "@/components/Navbar";
 import Index from "./pages/Index";
 import Chat from "./pages/Chat";
@@ -18,6 +19,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
     <QueryClientProvider client={queryClient}>
+      <NotificationsProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -39,6 +41,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
+      </NotificationsProvider>
     </QueryClientProvider>
   </ThemeProvider>
 );

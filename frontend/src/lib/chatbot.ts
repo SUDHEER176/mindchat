@@ -6,13 +6,15 @@ type EmotionResult = {
 
 const ENV_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL?.toString()?.replace(/\/+$/, "");
 const DEFAULT_PROD_API_BASE_URL = "https://mindchat-1.onrender.com";
-const DEFAULT_DEV_API_BASE_URL = "http://127.0.0.1:5000";
+const DEFAULT_DEV_API_BASE_URL = "http://localhost:5000";
 
 const API_BASE_URL =
   ENV_API_BASE_URL ||
   (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
     ? DEFAULT_DEV_API_BASE_URL
     : DEFAULT_PROD_API_BASE_URL);
+
+console.log("[Chatbot] Initialized with API_BASE_URL:", API_BASE_URL);
 
 const emotionPatterns: { keywords: string[]; emotion: string; emoji: string; responses: string[] }[] = [
   {
@@ -108,7 +110,8 @@ export async function streamAnalyzeAndRespond(
   message: string,
   onMeta: (emotion: string, emoji: string) => void,
   onChunk: (chunk: string) => void,
-  detectedEmotion?: string
+  detectedEmotion?: string,
+  onStreamError?: () => void
 ): Promise<void> {
   let sessionId = localStorage.getItem("mindful_chat_session_id");
   if (!sessionId) {
@@ -160,6 +163,7 @@ export async function streamAnalyzeAndRespond(
     console.error('Error in streaming:', error);
     onMeta("Neutral", "🤔");
     onChunk("I'm having trouble connecting to my brain right now.");
+    onStreamError?.();
   }
 }
 

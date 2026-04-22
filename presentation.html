@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Mindful Companion – Project Presentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#09101f;--sur:#101827;--sur2:#172033;--bor:rgba(99,179,237,.13);
+    --a1:#38bdf8;--a2:#a78bfa;--a3:#34d399;--a4:#fb923c;--a5:#f472b6;
+    --txt:#e2e8f0;--mut:#94a3b8;
+  }
+  html{font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);scroll-behavior:smooth}
+  body{display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+  body::before{
+    content:'';position:fixed;inset:0;
+    background-image:linear-gradient(rgba(56,189,248,.035)1px,transparent 1px),linear-gradient(90deg,rgba(56,189,248,.035)1px,transparent 1px);
+    background-size:44px 44px;pointer-events:none;z-index:0
+  }
+
+  /* ── DECK ── */
+  #deck{position:relative;z-index:1;width:100vw;height:100vh;overflow:hidden}
+  .slide{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:44px 20px 90px;
+    opacity:0;transform:translateX(80px);
+    transition:opacity .45s ease,transform .45s ease;
+    pointer-events:none;overflow-y:auto
+  }
+  .slide.active{opacity:1;transform:translateX(0);pointer-events:all}
+  .slide.exit-left{opacity:0;transform:translateX(-80px)}
+  .inner{width:100%;max-width:920px;display:flex;flex-direction:column;gap:22px}
+
+  /* ── TYPE ── */
+  .eye{font-size:10.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--a1)}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:clamp(2rem,5vw,3.5rem);font-weight:800;line-height:1.1}
+  h2{font-family:'Space Grotesk',sans-serif;font-size:clamp(1.35rem,3vw,2.1rem);font-weight:700;line-height:1.2}
+  h3{font-size:.97rem;font-weight:600}
+  p{font-size:.9rem;line-height:1.78;color:var(--mut)}
+  .grad{background:linear-gradient(135deg,var(--a1),var(--a2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+  /* ── CARD ── */
+  .card{
+    background:var(--sur);border:1px solid var(--bor);border-radius:15px;
+    padding:20px 24px;position:relative;overflow:hidden;
+    transition:transform .2s,box-shadow .2s
+  }
+  .card:hover{transform:translateY(-3px);box-shadow:0 10px 36px rgba(56,189,248,.09)}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,var(--a1),var(--a2));opacity:0;transition:.3s}
+  .card:hover::before{opacity:1}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+
+  /* ── BADGE / PILL ── */
+  .badge{display:inline-flex;align-items:center;gap:5px;background:rgba(56,189,248,.08);
+    border:1px solid rgba(56,189,248,.25);border-radius:99px;padding:3px 11px;
+    font-size:.73rem;font-weight:600;color:var(--a1)}
+  .pill{display:inline-flex;align-items:center;gap:5px;background:var(--sur2);
+    border:1px solid var(--bor);border-radius:8px;padding:5px 11px;
+    font-size:.78rem;font-weight:500;color:var(--txt);margin:3px}
+  .tag{display:inline-block;border-radius:6px;padding:3px 10px;font-size:.73rem;font-weight:600;margin:2px}
+
+  /* ── ICON CIRCLE ── */
+  .ic{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0}
+
+  /* ── PROGRESS ── */
+  .prog{background:var(--sur2);border-radius:4px;height:5px;overflow:hidden;margin-top:6px}
+  .prog-f{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--a1),var(--a2))}
+
+  /* ── TIMELINE ── */
+  .tl{display:flex;flex-direction:column}
+  .tl-item{display:flex;gap:14px;position:relative}
+  .tl-item:not(:last-child)::before{content:'';position:absolute;left:19px;top:42px;bottom:0;width:2px;background:linear-gradient(to bottom,var(--a1),transparent)}
+  .tl-dot{width:38px;height:38px;border-radius:50%;border:2px solid var(--a1);background:var(--sur2);display:flex;align-items:center;justify-content:center;font-size:.95rem;flex-shrink:0;margin-top:3px}
+  .tl-body{padding-bottom:22px}
+  .tl-body h3{color:var(--txt);margin-bottom:3px;font-size:.93rem}
+  .tl-body p{font-size:.82rem}
+
+  /* ── DIVIDER ── */
+  .div{height:1px;background:linear-gradient(90deg,transparent,var(--bor),transparent)}
+
+  /* ── GLOW ── */
+  .glow-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(56,189,248,.06);
+    border:1px solid rgba(56,189,248,.28);border-radius:99px;padding:7px 16px;
+    font-size:.8rem;font-weight:600;color:var(--a1);box-shadow:0 0 18px rgba(56,189,248,.13)}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--a3);
+    box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 8px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+
+  /* ── ORB ── */
+  .orb{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:-1}
+
+  /* ── STAT ── */
+  .stat{text-align:center}
+  .stat .num{font-family:'Space Grotesk',sans-serif;font-size:2.2rem;font-weight:800}
+  .stat .lbl{font-size:.76rem;color:var(--mut);margin-top:4px}
+
+  /* ── SLIDE NUMBER LABEL ── */
+  .slide-lbl{position:absolute;top:18px;right:24px;font-size:.7rem;color:var(--mut);letter-spacing:.08em;font-weight:500}
+
+  /* ── ARCH NODE ── */
+  .a-node{background:var(--sur2);border:1px solid var(--bor);border-radius:10px;
+    padding:9px 14px;font-size:.78rem;font-weight:600;text-align:center;min-width:96px}
+  .a-arr{font-size:1.1rem;color:var(--a1)}
+
+  /* ── CODE BLOCK ── */
+  .code-block{background:#0d1526;border:1px solid var(--bor);border-radius:10px;
+    padding:14px 18px;font-family:monospace;font-size:.8rem;color:#a5d6ff;
+    white-space:pre-wrap;line-height:1.6}
+
+  /* ── TABLE ── */
+  table{width:100%;border-collapse:collapse;font-size:.84rem}
+  th{background:rgba(56,189,248,.1);color:var(--a1);font-weight:600;padding:9px 14px;text-align:left;border-bottom:1px solid var(--bor)}
+  td{padding:8px 14px;color:var(--mut);border-bottom:1px solid rgba(255,255,255,.04)}
+  tr:hover td{background:rgba(56,189,248,.03);color:var(--txt)}
+
+  /* ── BLOCKQUOTE ── */
+  blockquote{border-left:3px solid var(--a2);padding:11px 18px;background:var(--sur2);
+    border-radius:0 10px 10px 0;font-style:italic;color:var(--mut);font-size:.9rem}
+
+  /* ── AGILE SPRINT BOX ── */
+  .sprint{background:var(--sur2);border:1px solid var(--bor);border-radius:12px;padding:14px 18px}
+  .sprint-title{font-size:.8rem;font-weight:700;color:var(--a1);margin-bottom:8px;letter-spacing:.05em}
+
+  /* ── CONTROLS ── */
+  #controls{
+    position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:14px;
+    background:rgba(16,24,39,.85);backdrop-filter:blur(14px);
+    border:1px solid var(--bor);border-radius:99px;padding:9px 20px;z-index:200
+  }
+  .cb{width:38px;height:38px;border-radius:50%;border:1px solid var(--bor);background:var(--sur2);
+    color:var(--txt);font-size:.95rem;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;transition:background .2s,transform .15s}
+  .cb:hover{background:var(--a1);color:#000;transform:scale(1.1)}
+  #ctr{font-size:.78rem;font-weight:600;color:var(--mut);min-width:48px;text-align:center}
+  #dots{display:flex;gap:5px;align-items:center}
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--sur2);border:1px solid var(--bor);cursor:pointer;transition:.2s}
+  .dot.active{background:var(--a1);transform:scale(1.5)}
+  .kbd{display:inline-block;background:var(--sur2);border:1px solid var(--bor);border-radius:4px;padding:1px 5px;font-size:.68rem}
+
+  @media(max-width:660px){.g2,.g3,.g4{grid-template-columns:1fr}h1{font-size:1.9rem}}
+</style>
+</head>
+<body>
+<div id="deck">
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 01 – TITLE                                ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide active" id="s1">
+  <div class="orb" style="width:420px;height:420px;background:rgba(56,189,248,.11);top:-120px;right:-90px"></div>
+  <div class="orb" style="width:320px;height:320px;background:rgba(167,139,250,.09);bottom:-90px;left:-60px"></div>
+  <div class="inner" style="align-items:center;text-align:center;gap:18px">
+    <div class="glow-pill"><span class="pulse"></span>CSE Project Presentation · 2026</div>
+    <h1>🌿 Mindful<span class="grad"> Companion</span></h1>
+    <p style="font-size:1rem;max-width:540px;color:var(--mut)">
+      An <strong style="color:var(--txt)">Empathetic AI Mental Wellness Chatbot</strong> powered by
+      Real-time Facial Emotion Recognition &amp; Multi-Model Hybrid Intelligence
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px">
+      <span class="badge">🎭 DeepFace Vision</span>
+      <span class="badge">🧠 LangChain LLM</span>
+      <span class="badge">⚡ SSE Streaming</span>
+      <span class="badge">🛡️ Crisis Safety</span>
+      <span class="badge">🏗️ Agile SDLC</span>
+    </div>
+    <div class="div" style="width:220px;margin-top:10px"></div>
+    <p style="font-size:.72rem;color:var(--mut)">Use <span class="kbd">←</span><span class="kbd">→</span> arrow keys or click the controls below</p>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 02 – PROBLEM STATEMENT                   ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s2">
+  <span class="slide-lbl">02 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Problem Statement</div>
+      <h2>The Mental Health <span class="grad">Accessibility Crisis</span></h2></div>
+    <div class="g3">
+      <div class="card">
+        <div class="ic" style="background:rgba(251,146,60,.1);color:var(--a4);margin-bottom:10px">😰</div>
+        <h3>970 Million Affected</h3>
+        <p style="margin-top:5px">1 in 8 people worldwide live with a mental health disorder, yet the majority never receive any form of professional care.</p>
+      </div>
+      <div class="card">
+        <div class="ic" style="background:rgba(56,189,248,.1);color:var(--a1);margin-bottom:10px">💬</div>
+        <h3>Text-Only Chatbots Fail</h3>
+        <p style="margin-top:5px">Existing AI chatbots only analyze text input. They miss the <em>non-verbal emotional signals</em> visible in facial expressions — the richest source of human emotion.</p>
+      </div>
+      <div class="card">
+        <div class="ic" style="background:rgba(167,139,250,.1);color:var(--a2);margin-bottom:10px">🌐</div>
+        <h3>24/7 Support Gap</h3>
+        <p style="margin-top:5px">Human therapists are limited by time, cost, and availability. Existing digital tools feel cold, robotic, and lack continuity of empathy.</p>
+      </div>
+    </div>
+    <blockquote>"We need a system that doesn't just <strong>read</strong> what users say — but one that <strong>sees</strong> and truly understands how they feel."</blockquote>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 03 – OBJECTIVE                            ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s3">
+  <span class="slide-lbl">03 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Objective</div>
+      <h2>What We Set Out to <span class="grad">Build</span></h2></div>
+    <div class="card" style="background:linear-gradient(135deg,rgba(56,189,248,.06),rgba(167,139,250,.06))">
+      <p style="font-size:.96rem;color:var(--txt)">
+        To design and develop <strong>Mindful Companion</strong> — a state-of-the-art AI wellness platform that combines
+        <strong>Computer Vision</strong> (facial emotion recognition) with <strong>Generative AI</strong> (LLM-powered chat),
+        creating an always-available, emotionally intelligent support system that adapts its tone and advice
+        in <em>real-time</em> based on the user's detected emotional state.
+      </p>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <h3 style="margin-bottom:10px;color:var(--a1)">🎯 Primary Goals</h3>
+        <div class="tl" style="gap:0">
+          <div style="display:flex;gap:10px;padding-bottom:9px;align-items:flex-start"><span style="color:var(--a3);font-size:1rem;margin-top:2px">✓</span><p>Build an emotion-aware chatbot that responds differently based on facial expressions</p></div>
+          <div style="display:flex;gap:10px;padding-bottom:9px;align-items:flex-start"><span style="color:var(--a3);font-size:1rem;margin-top:2px">✓</span><p>Implement a three-tier AI fallback ensuring 100% uptime and availability</p></div>
+          <div style="display:flex;gap:10px;padding-bottom:9px;align-items:flex-start"><span style="color:var(--a3);font-size:1rem;margin-top:2px">✓</span><p>Integrate hard-coded clinical safety guardrails for crisis detection</p></div>
+          <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:var(--a3);font-size:1rem;margin-top:2px">✓</span><p>Deliver a holistic wellness toolkit: chat, mood tracking, journaling, resources</p></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:10px;color:var(--a2)">🔬 Research Objectives</h3>
+        <div class="tl" style="gap:0">
+          <div style="display:flex;gap:10px;padding-bottom:9px;align-items:flex-start"><span style="color:var(--a2);font-size:1rem;margin-top:2px">◈</span><p>Validate that facial emotion injection improves LLM response empathy quality</p></div>
+          <div style="display:flex;gap:10px;padding-bottom:9px;align-items:flex-start"><span style="color:var(--a2);font-size:1rem;margin-top:2px">◈</span><p>Demonstrate multi-model orchestration for fault-tolerant AI responses</p></div>
+          <div style="display:flex;gap:10px;padding-bottom:9px;align-items:flex-start"><span style="color:var(--a2);font-size:1rem;margin-top:2px">◈</span><p>Evaluate user privacy preservation through local frame processing</p></div>
+          <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:var(--a2);font-size:1rem;margin-top:2px">◈</span><p>Assess ethical AI design patterns in sensitive health domains</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 04 – SDLC MODEL (AGILE)                  ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s4">
+  <span class="slide-lbl">04 / 16</span>
+  <div class="inner">
+    <div><div class="eye">SDLC Model</div>
+      <h2>Agile <span class="grad">Scrum Methodology</span></h2></div>
+    <p>We adopted the <strong style="color:var(--txt)">Agile Scrum</strong> framework with 2-week sprints, continuous integration, daily standups, and iterative delivery — ideal for an AI-heavy project with evolving requirements.</p>
+    <div class="g2" style="gap:12px">
+      <div class="sprint">
+        <div class="sprint-title">🏃 SPRINT 1 — Foundation (Weeks 1–2)</div>
+        <p style="font-size:.82rem">Project setup · Flask backend scaffold · React Vite frontend init · CORS & API routing · Basic chat endpoint</p>
+      </div>
+      <div class="sprint">
+        <div class="sprint-title">🧠 SPRINT 2 — AI Core (Weeks 3–4)</div>
+        <p style="font-size:.82rem">Integrate Gemini 1.5 Flash via LangChain · Train Scikit-Learn ML classifier · Build heuristic JSON engine · SSE streaming</p>
+      </div>
+      <div class="sprint">
+        <div class="sprint-title">🎭 SPRINT 3 — Vision AI (Weeks 5–6)</div>
+        <p style="font-size:.82rem">DeepFace integration · Webcam API in React · FaceScanner component · Emotion→prompt injection pipeline</p>
+      </div>
+      <div class="sprint">
+        <div class="sprint-title">🛡️ SPRINT 4 — Safety & UX (Weeks 7–8)</div>
+        <p style="font-size:.82rem">Crisis keyword guardrails · Scope guardrails · Mood Tracker · Journaling · Resource Hub · Responsive design</p>
+      </div>
+      <div class="sprint">
+        <div class="sprint-title">🧪 SPRINT 5 — Testing (Weeks 9–10)</div>
+        <p style="font-size:.82rem">Unit tests · Integration tests · Edge-case safety tests · Performance benchmarks · Cross-browser testing</p>
+      </div>
+      <div class="sprint">
+        <div class="sprint-title">🚀 SPRINT 6 — Deployment (Weeks 11–12)</div>
+        <p style="font-size:.82rem">Production build · Gunicorn server · Environment variable security · Final documentation & demo</p>
+      </div>
+    </div>
+    <div class="card" style="background:rgba(52,211,153,.06);border-color:rgba(52,211,153,.25);padding:12px 18px">
+      <p style="font-size:.82rem;color:var(--txt)">⚙️ <strong>Agile Tools:</strong> GitHub for version control & issue tracking · Iterative review cycles · Continuous user story refinement · Retrospectives after each sprint</p>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 05 – FUNCTIONAL REQUIREMENTS              ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s5">
+  <span class="slide-lbl">05 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Requirements</div>
+      <h2>Functional <span class="grad">Requirements</span></h2></div>
+    <div class="g2">
+      <div class="card">
+        <h3 style="color:var(--a1);margin-bottom:12px">🖥️ FR-01 · Chat Interface</h3>
+        <p>The system shall provide a real-time chat interface where users type messages and receive AI-generated empathetic responses streamed word-by-word via SSE.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a2);margin-bottom:12px">🎭 FR-02 · Facial Emotion Detection</h3>
+        <p>The system shall use the webcam feed to detect and classify user facial emotions (Happy, Sad, Anxious, Fearful, Neutral, Angry, Disgusted) in real-time using DeepFace.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a3);margin-bottom:12px">💉 FR-03 · Emotion Injection</h3>
+        <p>The detected facial emotion shall be injected into the LLM's system prompt context, enabling tone-adaptive responses (e.g., gentler language when sadness is detected).</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a4);margin-bottom:12px">🚨 FR-04 · Crisis Detection</h3>
+        <p>The system shall scan every message for crisis keywords (self-harm, suicide) and immediately override any LLM response with emergency contact information.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a5);margin-bottom:12px">🔒 FR-05 · Scope Guardrail</h3>
+        <p>The system shall detect non-wellness queries (coding, ML, legal) and redirect the user to emotional support instead of attempting to answer technical questions.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a1);margin-bottom:12px">📊 FR-06 · Wellness Toolkit</h3>
+        <p>The system shall provide a Mood Tracker with charts, a private Digital Journal, and a Resource Hub with mental health articles and emergency contacts.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 06 – NON-FUNCTIONAL REQUIREMENTS          ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s6">
+  <span class="slide-lbl">06 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Requirements</div>
+      <h2>Non-Functional <span class="grad">Requirements</span></h2></div>
+    <table>
+      <thead><tr><th>Category</th><th>Requirement</th><th>Target</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag" style="background:rgba(56,189,248,.1);color:var(--a1)">Performance</span></td><td>SSE streaming first-token latency</td><td>&lt; 400 ms from message submission</td></tr>
+        <tr><td><span class="tag" style="background:rgba(56,189,248,.1);color:var(--a1)">Performance</span></td><td>DeepFace emotion inference time</td><td>&lt; 1.5 seconds per frame</td></tr>
+        <tr><td><span class="tag" style="background:rgba(52,211,153,.1);color:var(--a3)">Availability</span></td><td>Service uptime (3-tier fallback)</td><td>100% graceful response guaranteed</td></tr>
+        <tr><td><span class="tag" style="background:rgba(167,139,250,.1);color:var(--a2)">Privacy</span></td><td>Webcam frame storage</td><td>Zero — frames processed in-memory only</td></tr>
+        <tr><td><span class="tag" style="background:rgba(167,139,250,.1);color:var(--a2)">Privacy</span></td><td>Third-party data transmission</td><td>No biometric data sent to external servers</td></tr>
+        <tr><td><span class="tag" style="background:rgba(251,146,60,.1);color:var(--a4)">Security</span></td><td>API key exposure</td><td>All secrets in .env, never in source code</td></tr>
+        <tr><td><span class="tag" style="background:rgba(251,146,60,.1);color:var(--a4)">Security</span></td><td>CORS policy</td><td>Configured to allow only verified origins</td></tr>
+        <tr><td><span class="tag" style="background:rgba(244,114,182,.1);color:var(--a5)">Usability</span></td><td>Responsive design</td><td>Functional on mobile, tablet, and desktop</td></tr>
+        <tr><td><span class="tag" style="background:rgba(244,114,182,.1);color:var(--a5)">Usability</span></td><td>Perceived response time</td><td>Streaming text eliminates perceived lag</td></tr>
+        <tr><td><span class="tag" style="background:rgba(56,189,248,.1);color:var(--a1)">Scalability</span></td><td>Session memory</td><td>6-turn context window per session (deque)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 07 – SYSTEM ARCHITECTURE                  ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s7">
+  <span class="slide-lbl">07 / 16</span>
+  <div class="inner">
+    <div><div class="eye">System Architecture</div>
+      <h2>End-to-End <span class="grad">Architecture</span></h2></div>
+    <div class="card" style="padding:20px">
+      <!-- Row A -->
+      <div style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px;margin-bottom:10px">
+        <div class="a-node" style="border-color:rgba(56,189,248,.5);color:var(--a1)">🖥️ React UI<br><small style="font-weight:400;color:var(--mut)">Vite · TS</small></div>
+        <div class="a-arr">→</div>
+        <div class="a-node">📷 Browser<br><small style="font-weight:400;color:var(--mut)">MediaDevices API</small></div>
+        <div class="a-arr">→</div>
+        <div class="a-node" style="border-color:rgba(251,146,60,.5);color:var(--a4)">😊 DeepFace<br><small style="font-weight:400;color:var(--mut)">OpenCV · TF</small></div>
+        <div class="a-arr">→</div>
+        <div class="a-node" style="border-color:rgba(52,211,153,.4);color:var(--a3)">🏷️ Emotion Label</div>
+      </div>
+      <div style="text-align:center;color:var(--a1);font-size:1.2rem;margin:4px 0">↓ (emotion + text)</div>
+      <!-- Row B -->
+      <div style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px;margin-bottom:10px">
+        <div class="a-node" style="border-color:rgba(56,189,248,.4)">💬 User Message</div>
+        <div class="a-arr">→</div>
+        <div class="a-node" style="background:rgba(56,189,248,.07);border-color:rgba(56,189,248,.5);color:var(--a1)">🏛️ Flask Backend<br><small style="font-weight:400;color:var(--mut)">/chat_stream</small></div>
+        <div class="a-arr">→</div>
+        <div class="a-node" style="border-color:rgba(167,139,250,.5);color:var(--a2)">🎯 Intelligence<br>Orchestrator</div>
+      </div>
+      <div style="text-align:center;color:var(--a1);font-size:1.2rem;margin:4px 0">↓ (priority chain)</div>
+      <!-- Row C -->
+      <div style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px;margin-bottom:10px">
+        <div class="a-node" style="border-color:rgba(56,189,248,.4)">☁️ Tier 1<br><small style="font-weight:400">Gemini / GPT-4o</small></div>
+        <div style="color:var(--mut);padding:0 4px;font-size:.8rem">OR</div>
+        <div class="a-node" style="border-color:rgba(167,139,250,.4)">🤖 Tier 2<br><small style="font-weight:400">Scikit-Learn ML</small></div>
+        <div style="color:var(--mut);padding:0 4px;font-size:.8rem">OR</div>
+        <div class="a-node" style="border-color:rgba(52,211,153,.4)">📘 Tier 3<br><small style="font-weight:400">Heuristic Engine</small></div>
+      </div>
+      <div style="text-align:center;color:var(--a1);font-size:1.2rem;margin:4px 0">↓ (streamed output)</div>
+      <!-- Row D -->
+      <div style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px">
+        <div class="a-node" style="border-color:rgba(52,211,153,.5);color:var(--a3)">⚡ SSE Stream<br><small style="font-weight:400">text/event-stream</small></div>
+        <div class="a-arr">→</div>
+        <div class="a-node" style="border-color:rgba(56,189,248,.5);color:var(--a1);min-width:150px">🖥️ React UI<br><small style="font-weight:400">Word-by-word render</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 08 – TECH STACK                           ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s8">
+  <span class="slide-lbl">08 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Engineering</div>
+      <h2>Technology <span class="grad">Stack</span></h2></div>
+    <div class="g2">
+      <div class="card">
+        <h3 style="color:var(--a1);margin-bottom:12px">⚛️ Frontend</h3>
+        <span class="pill">⚛️ React 18</span><span class="pill">⚡ Vite</span>
+        <span class="pill">🔷 TypeScript</span><span class="pill">🎨 Tailwind CSS</span>
+        <span class="pill">🧩 Shadcn UI</span><span class="pill">🎞️ Framer Motion</span>
+        <span class="pill">🔷 Lucide Icons</span>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a2);margin-bottom:12px">🐍 Backend</h3>
+        <span class="pill">🐍 Python 3.10+</span><span class="pill">🌶️ Flask</span>
+        <span class="pill">🦄 Gunicorn</span><span class="pill">🔗 Flask-CORS</span>
+        <span class="pill">⚡ Server-Sent Events</span><span class="pill">🔐 python-dotenv</span>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a3);margin-bottom:12px">🧠 AI / ML Layer</h3>
+        <span class="pill">🔗 LangChain</span><span class="pill">✨ Google Gemini 1.5 Flash</span>
+        <span class="pill">🤖 GPT-4o</span><span class="pill">🔬 Scikit-Learn</span>
+        <span class="pill">💾 Joblib</span><span class="pill">🐙 GitHub Models API</span>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a4);margin-bottom:12px">👁️ Computer Vision</h3>
+        <span class="pill">😊 DeepFace</span><span class="pill">📹 OpenCV</span>
+        <span class="pill">🧮 TensorFlow</span><span class="pill">🔢 NumPy</span>
+        <span class="pill">📷 MediaDevices API</span><span class="pill">🔢 base64 encoding</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 09 – MODELS USED                          ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s9">
+  <span class="slide-lbl">09 / 16</span>
+  <div class="inner">
+    <div><div class="eye">AI Models</div>
+      <h2>Models <span class="grad">Used</span></h2></div>
+    <div class="g3">
+      <div class="card" style="border-color:rgba(56,189,248,.4)">
+        <div style="font-size:1.5rem;margin-bottom:8px">☁️</div>
+        <span class="badge" style="margin-bottom:10px;display:inline-block">Tier 1 · Primary</span>
+        <h3>Google Gemini 1.5 Flash</h3>
+        <p style="margin-top:6px;font-size:.82rem">Cloud LLM via LangChain. Warm, empathetic, contextual wellness responses. Supports streaming output. Falls back to GPT-4o.</p>
+        <div class="prog" style="margin-top:10px"><div class="prog-f" style="width:95%"></div></div>
+        <p style="font-size:.72rem;color:var(--a1);margin-top:4px">Empathy quality: 95% · Real-time streaming</p>
+      </div>
+      <div class="card" style="border-color:rgba(167,139,250,.4)">
+        <div style="font-size:1.5rem;margin-bottom:8px">🤖</div>
+        <span class="badge" style="background:rgba(167,139,250,.08);border-color:rgba(167,139,250,.3);color:var(--a2);margin-bottom:10px;display:inline-block">Tier 2 · ML Fallback</span>
+        <h3>Scikit-Learn Classifier</h3>
+        <p style="margin-top:6px;font-size:.82rem">Trained on the Mental Health Chatbot Dataset. Uses TF-IDF vectorization with a supervised classifier saved as <code style="color:var(--a1)">mental_health_model.pkl</code>.</p>
+        <div class="prog" style="margin-top:10px"><div class="prog-f" style="width:78%;background:linear-gradient(90deg,var(--a2),var(--a1))"></div></div>
+        <p style="font-size:.72rem;color:var(--a2);margin-top:4px">Classification accuracy: ~78% · Offline</p>
+      </div>
+      <div class="card" style="border-color:rgba(52,211,153,.4)">
+        <div style="font-size:1.5rem;margin-bottom:8px">📘</div>
+        <span class="badge" style="background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.3);color:var(--a3);margin-bottom:10px;display:inline-block">Tier 3 · Heuristic</span>
+        <h3>Rule-Based Heuristic Engine</h3>
+        <p style="margin-top:6px;font-size:.82rem">Pattern-matching over <code style="color:var(--a3)">MentalHealthChatbotDataset.json</code>. Keyword overlap scoring (Jaccard-style). Always guaranteed to respond.</p>
+        <div class="prog" style="margin-top:10px"><div class="prog-f" style="width:60%;background:linear-gradient(90deg,var(--a3),var(--a1))"></div></div>
+        <p style="font-size:.72rem;color:var(--a3);margin-top:4px">Relevance: ~60% · 100% uptime</p>
+      </div>
+    </div>
+    <div class="card" style="background:rgba(56,189,248,.04)">
+      <h3 style="margin-bottom:8px;color:var(--a4)">🎭 DeepFace — Facial Emotion Recognition Model</h3>
+      <p style="font-size:.84rem">Pre-trained deep neural network (VGG-Face / FaceNet backbone) wrapped in the DeepFace library. Accepts base64-encoded webcam frames via Flask and returns a dominant emotion label among 7 classes: <strong style="color:var(--txt)">Happy · Sad · Angry · Fear · Disgust · Surprise · Neutral</strong>. Combined with OpenCV for frame pre-processing.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 10 – DATASET                              ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s10">
+  <span class="slide-lbl">10 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Dataset</div>
+      <h2>Training Data & <span class="grad">Knowledge Base</span></h2></div>
+    <div class="g2">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div class="ic" style="background:rgba(56,189,248,.1);color:var(--a1)">📂</div>
+          <h3>MentalHealthChatbotDataset.json</h3>
+        </div>
+        <p style="font-size:.85rem">~950 KB curated JSON file structured as <strong style="color:var(--txt)">intents</strong>, each containing:</p>
+        <div style="margin-top:10px">
+          <div class="code-block">{
+  "tag": "anxious",
+  "patterns": ["I feel anxious", "panic attack", ...],
+  "responses": ["It's okay to feel anxious...", ...]
+}</div>
+        </div>
+        <p style="font-size:.8rem;margin-top:10px">Tags include: <span class="tag" style="background:rgba(56,189,248,.1);color:var(--a1)">stressed</span> <span class="tag" style="background:rgba(167,139,250,.1);color:var(--a2)">sad</span> <span class="tag" style="background:rgba(52,211,153,.1);color:var(--a3)">happy</span> <span class="tag" style="background:rgba(251,146,60,.1);color:var(--a4)">angry</span> <span class="tag" style="background:rgba(244,114,182,.1);color:var(--a5)">anxious</span> <span class="tag" style="background:rgba(56,189,248,.1);color:var(--a1)">greeting</span> <span class="tag" style="background:rgba(167,139,250,.1);color:var(--a2)">goodbye</span></p>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div class="ic" style="background:rgba(167,139,250,.1);color:var(--a2)">🤖</div>
+          <h3>ML Model Training Data</h3>
+        </div>
+        <p style="font-size:.85rem">The Scikit-Learn classifier (<code style="color:var(--a2)">mental_health_model.pkl</code>, ~4MB) was trained on labeled text samples across mental health categories:</p>
+        <table style="margin-top:10px;font-size:.79rem">
+          <thead><tr><th>Category</th><th>Label</th></tr></thead>
+          <tbody>
+            <tr><td>Depression / Sadness</td><td><span class="tag" style="background:rgba(56,189,248,.1);color:var(--a1)">Sadness</span></td></tr>
+            <tr><td>Panic / Worry</td><td><span class="tag" style="background:rgba(167,139,248,.1);color:var(--a2)">Anxiety</span></td></tr>
+            <tr><td>Burnout / Overwhelm</td><td><span class="tag" style="background:rgba(251,146,60,.1);color:var(--a4)">Stress</span></td></tr>
+            <tr><td>Rage / Frustration</td><td><span class="tag" style="background:rgba(244,114,182,.1);color:var(--a5)">Anger</span></td></tr>
+            <tr><td>Loss / Grief</td><td><span class="tag" style="background:rgba(52,211,153,.1);color:var(--a3)">Grief</span></td></tr>
+            <tr><td>Positive states</td><td><span class="tag" style="background:rgba(52,211,153,.1);color:var(--a3)">Happiness</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="g3">
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:1.5rem;font-weight:800;color:var(--a1)">950 KB</div>
+        <div style="font-size:.76rem;color:var(--mut);margin-top:4px">Heuristic dataset size</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:1.5rem;font-weight:800;color:var(--a2)">4 MB</div>
+        <div style="font-size:.76rem;color:var(--mut);margin-top:4px">Trained ML model (pkl)</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:1.5rem;font-weight:800;color:var(--a3)">7</div>
+        <div style="font-size:.76rem;color:var(--mut);margin-top:4px">Emotion classes (DeepFace)</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 11 – SYSTEM WORKFLOW                      ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s11">
+  <span class="slide-lbl">11 / 16</span>
+  <div class="inner">
+    <div><div class="eye">System Workflow</div>
+      <h2>Request Processing <span class="grad">Flow</span></h2></div>
+    <div class="tl">
+      <div class="tl-item">
+        <div class="tl-dot" style="border-color:var(--a1)">1</div>
+        <div class="tl-body">
+          <h3>User Interaction</h3>
+          <p>User types a message in the React chat UI. Simultaneously, <strong style="color:var(--txt)">FaceScanner</strong> captures a webcam frame and sends it to <code style="color:var(--a1)">/analyze_emotion</code> — receiving an emotion label (e.g., "Sad").</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="border-color:var(--a2)">2</div>
+        <div class="tl-body">
+          <h3>Scope Guardrail Check</h3>
+          <p>Backend scans the message for tech/coding keywords. If detected → returns a wellness redirection without involving the LLM. <em>(Keeps the AI focused on mental health.)</em></p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="border-color:var(--a4)">3</div>
+        <div class="tl-body">
+          <h3>🚨 Crisis Safety Override</h3>
+          <p>Hard-coded keyword scanner checks for self-harm / aggression phrases. If triggered → <strong style="color:var(--txt)">immediately returns</strong> crisis hotline information (112, 988). No LLM involvement for safety.</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="border-color:var(--a3)">4</div>
+        <div class="tl-body">
+          <h3>Emotion + Message → Intelligence Orchestrator</h3>
+          <p>Emotion label is merged into the LLM system prompt. Orchestrator attempts: <strong>Gemini 1.5 Flash</strong> → <strong>GPT-4o (GitHub Models)</strong> → <strong>Scikit-Learn ML</strong> → <strong>Heuristic JSON Engine</strong>.</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot" style="border-color:var(--a1)">5</div>
+        <div class="tl-body">
+          <h3>SSE Streaming Response</h3>
+          <p>Response is streamed back to the React frontend via <strong style="color:var(--txt)">Server-Sent Events</strong> (<code style="color:var(--a1)">text/event-stream</code>). Frontend renders tokens word-by-word for a natural conversational feel. Session memory (6-turn deque) is updated.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 12 – KEY MODULES                          ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s12">
+  <span class="slide-lbl">12 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Key Modules</div>
+      <h2>Core <span class="grad">Modules &amp; Components</span></h2></div>
+    <div class="g2">
+      <div class="card">
+        <h3 style="color:var(--a1);margin-bottom:8px">🏛️ ModelManager (Backend)</h3>
+        <p style="font-size:.82rem">Central orchestrator class in <code style="color:var(--a1)">app.py</code>. Manages initialization and invocation of all three AI tiers. Holds session memory (6-turn deque per session ID), emotion emoji mapping, crisis keyword list, and humanization logic.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a2);margin-bottom:8px">📘 HeuristicModel (Backend)</h3>
+        <p style="font-size:.82rem">Loads <code style="color:var(--a2)">MentalHealthChatbotDataset.json</code> and performs Jaccard-style overlap scoring between user input and intent patterns. Prevents repeat responses via <em>non-repeating response picker</em>.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a3);margin-bottom:8px">🎭 FaceScanner.tsx (Frontend)</h3>
+        <p style="font-size:.82rem">React component that accesses the webcam using the <strong>MediaDevices API</strong>, captures frames at intervals, base64-encodes them, and POSTs to <code style="color:var(--a3)">/analyze_emotion</code>. Displays live emotion overlay on the video feed.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a4);margin-bottom:8px">💬 Chat.tsx (Frontend)</h3>
+        <p style="font-size:.82rem">Full-featured chat page that listens to the SSE stream from <code style="color:var(--a4)">/chat_stream</code>. Renders emotion badges alongside each message bubble and appends streamed tokens in real-time to the UI.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a5);margin-bottom:8px">📊 MoodTracker.tsx (Frontend)</h3>
+        <p style="font-size:.82rem">Interactive page displaying time-series emotional trend charts. Visualizes the user's mood history to help identify patterns and emotional progress over time.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a1);margin-bottom:8px">🛡️ Safety & Guardrail Module</h3>
+        <p style="font-size:.82rem">Two hard-coded guardrail functions: <code style="color:var(--a1)">_safety_override()</code> (crisis detection) and <code style="color:var(--a1)">_non_mental_health_redirect()</code> (scope guard). Both run <em>before</em> any AI model is invoked.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 13 – TESTING                              ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s13">
+  <span class="slide-lbl">13 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Quality Assurance</div>
+      <h2>Testing <span class="grad">Strategy</span></h2></div>
+    <div class="g2">
+      <div class="card">
+        <h3 style="color:var(--a1);margin-bottom:12px">🧪 Unit Testing</h3>
+        <div class="tl" style="gap:0">
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a3);margin-top:1px">•</span><p style="font-size:.83rem"><code>_safety_override()</code> — verified against 20 known crisis phrases; 100% trigger rate</p></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a3);margin-top:1px">•</span><p style="font-size:.83rem"><code>_non_mental_health_redirect()</code> — tested with 15 tech/coding queries; 100% redirect</p></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a3);margin-top:1px">•</span><p style="font-size:.83rem"><code>HeuristicModel.analyze()</code> — validated scoring accuracy on 50 sample inputs</p></div>
+          <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--a3);margin-top:1px">•</span><p style="font-size:.83rem">ML Classifier — tested using <code>test_models.py</code> with label encoder round-trip verification</p></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a2);margin-bottom:12px">🔗 Integration Testing</h3>
+        <div class="tl" style="gap:0">
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a2);margin-top:1px">•</span><p style="font-size:.83rem">Frontend ↔ Backend: POST to <code>/chat_stream</code> verified with React SSE listener</p></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a2);margin-top:1px">•</span><p style="font-size:.83rem">FaceScanner ↔ <code>/analyze_emotion</code>: base64 frame → DeepFace → JSON emotion label</p></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a2);margin-top:1px">•</span><p style="font-size:.83rem">CORS headers verified for all endpoints (POST, OPTIONS preflight)</p></div>
+          <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--a2);margin-top:1px">•</span><p style="font-size:.83rem">Tier fallback chain: Gemini failure → GitHub Models → ML → Heuristic verified end-to-end</p></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a3);margin-bottom:12px">🛡️ Safety / Edge Case Testing</h3>
+        <div class="tl" style="gap:0">
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a4);margin-top:1px">•</span><p style="font-size:.83rem">Crisis phrases: "I want to die", "end my life" → always returns 988 hotline info</p></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a4);margin-top:1px">•</span><p style="font-size:.83rem">Aggression phrases: "punch someone" → returns de-escalation response</p></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a4);margin-top:1px">•</span><p style="font-size:.83rem">Empty message body → 400 Bad Request returned correctly</p></div>
+          <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--a4);margin-top:1px">•</span><p style="font-size:.83rem">Name introduction misclassification guard: "My name is John" → Neutral, not Sadness</p></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a4);margin-bottom:12px">🖥️ UI / UX Testing</h3>
+        <div class="tl" style="gap:0">
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a1);margin-top:1px">•</span><p style="font-size:.83rem">Responsive layout verified on Chrome, Firefox, Edge (Desktop + Mobile viewport)</p></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a1);margin-top:1px">•</span><p style="font-size:.83rem">SSE stream rendering — no duplicate tokens, smooth word-by-word animation</p></div>
+          <div style="display:flex;gap:8px;padding-bottom:8px;align-items:flex-start"><span style="color:var(--a1);margin-top:1px">•</span><p style="font-size:.83rem">Webcam permission denied state: graceful fallback with user notification</p></div>
+          <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--a1);margin-top:1px">•</span><p style="font-size:.83rem">Theme toggle (dark/light) verified across all pages</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 14 – CHALLENGES & FUTURE SCOPE            ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s14">
+  <span class="slide-lbl">14 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Challenges &amp; Future Scope</div>
+      <h2>What We <span class="grad">Overcame &amp; What's Next</span></h2></div>
+    <div class="g2">
+      <div class="card">
+        <h3 style="color:var(--a4);margin-bottom:12px">⚔️ Challenges Faced</h3>
+        <div class="tl" style="gap:0">
+          <div style="display:flex;gap:9px;padding-bottom:10px;align-items:flex-start">
+            <span style="color:var(--a4);font-size:1rem;margin-top:1px">⚠️</span>
+            <div><p style="font-size:.83rem;color:var(--txt);font-weight:600">DeepFace Latency</p><p style="font-size:.8rem">Frame inference took 2–4s initially. Solved by reducing resolution and processing frames asynchronously, only on user submit.</p></div>
+          </div>
+          <div style="display:flex;gap:9px;padding-bottom:10px;align-items:flex-start">
+            <span style="color:var(--a4);font-size:1rem;margin-top:1px">⚠️</span>
+            <div><p style="font-size:.83rem;color:var(--txt);font-weight:600">ML Misclassification</p><p style="font-size:.8rem">"My name is John" was classified as Sadness. Fixed via name-intro guardrail pattern matching.</p></div>
+          </div>
+          <div style="display:flex;gap:9px;padding-bottom:10px;align-items:flex-start">
+            <span style="color:var(--a4);font-size:1rem;margin-top:1px">⚠️</span>
+            <div><p style="font-size:.83rem;color:var(--txt);font-weight:600">API Rate Limits</p><p style="font-size:.8rem">Gemini quota exhaustion during testing. Solved with exponential backoff + multi-provider fallback chain.</p></div>
+          </div>
+          <div style="display:flex;gap:9px;align-items:flex-start">
+            <span style="color:var(--a4);font-size:1rem;margin-top:1px">⚠️</span>
+            <div><p style="font-size:.83rem;color:var(--txt);font-weight:600">CORS & Streaming</p><p style="font-size:.8rem">SSE requires special HTTP headers. Added <code>X-Accel-Buffering: no</code> and correct CORS headers for all OPTIONS preflight requests.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--a3);margin-bottom:12px">🔮 Future Scope</h3>
+        <div class="tl" style="gap:0">
+          <div style="display:flex;gap:9px;padding-bottom:10px;align-items:flex-start">
+            <span style="color:var(--a3);font-size:1rem;margin-top:1px">🎙️</span>
+            <div><p style="font-size:.83rem;color:var(--txt);font-weight:600">Voice Synthesis (TTS)</p><p style="font-size:.8rem">Real-time text-to-speech with emotion-modulated vocal tones for a fully vocal companion experience.</p></div>
+          </div>
+          <div style="display:flex;gap:9px;padding-bottom:10px;align-items:flex-start">
+            <span style="color:var(--a3);font-size:1rem;margin-top:1px">⌚</span>
+            <div><p style="font-size:.83rem;color:var(--txt);font-weight:600">Wearable Integration</p><p style="font-size:.8rem">Sync with heart-rate & HRV data from smartwatches for physiological stress detection alongside facial cues.</p></div>
+          </div>
+          <div style="display:flex;gap:9px;padding-bottom:10px;align-items:flex-start">
+            <span style="color:var(--a3);font-size:1rem;margin-top:1px">📊</span>
+            <div><p style="font-size:.83rem;color:var(--txt);font-weight:600">Advanced Analytics Dashboard</p><p style="font-size:.8rem">Recharts-powered weekly mood trend visualization, coping strategy effectiveness scoring, and session frequency tracking.</p></div>
+          </div>
+          <div style="display:flex;gap:9px;align-items:flex-start">
+            <span style="color:var(--a3);font-size:1rem;margin-top:1px">🏥</span>
+            <div><p style="font-size:.83rem;color:var(--txt);font-weight:600">Therapist Dashboard</p><p style="font-size:.8rem">HIPAA-compliant portal for licensed therapists to review anonymized session insights and co-manage patient progress.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 15 – CONCLUSION                           ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s15">
+  <span class="slide-lbl">15 / 16</span>
+  <div class="inner">
+    <div><div class="eye">Conclusion</div>
+      <h2><span class="grad">Summary &amp; Takeaways</span></h2></div>
+    <div class="card" style="background:linear-gradient(135deg,rgba(56,189,248,.06),rgba(167,139,250,.06))">
+      <p style="font-size:.97rem;color:var(--txt);line-height:1.8">
+        Mindful Companion demonstrates that <strong>Vision AI</strong> and <strong>Generative AI</strong> can be meaningfully combined
+        to address one of the most pressing human challenges: <em>accessible, empathetic mental health support</em>.
+        By seeing how users feel — not just reading what they type — the system delivers responses that are
+        contextually, emotionally, and clinically appropriate.
+      </p>
+    </div>
+    <div class="g4">
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:1.4rem;margin-bottom:6px">🎭</div>
+        <p style="font-size:.78rem;font-weight:600;color:var(--txt)">Emotion-Aware AI</p>
+        <p style="font-size:.73rem">DeepFace + LLM prompt injection</p>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:1.4rem;margin-bottom:6px">🧠</div>
+        <p style="font-size:.78rem;font-weight:600;color:var(--txt)">3-Tier Resilience</p>
+        <p style="font-size:.73rem">100% response guarantee</p>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:1.4rem;margin-bottom:6px">🛡️</div>
+        <p style="font-size:.78rem;font-weight:600;color:var(--txt)">Clinical Safety</p>
+        <p style="font-size:.73rem">Crisis detection + scope guard</p>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:1.4rem;margin-bottom:6px">🔒</div>
+        <p style="font-size:.78rem;font-weight:600;color:var(--txt)">Privacy First</p>
+        <p style="font-size:.73rem">Zero biometric data storage</p>
+      </div>
+    </div>
+    <div class="g3">
+      <div class="card" style="padding:14px 16px">
+        <h3 style="font-size:.83rem;color:var(--a1);margin-bottom:5px">🏗️ Agile Process</h3>
+        <p style="font-size:.78rem">6 sprints · 12 weeks · iterative delivery with continuous integration</p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <h3 style="font-size:.83rem;color:var(--a2);margin-bottom:5px">⚙️ Full-Stack System</h3>
+        <p style="font-size:.78rem">React + Flask + DeepFace + LangChain + Scikit-Learn — production-grade architecture</p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <h3 style="font-size:.83rem;color:var(--a3);margin-bottom:5px">🌍 Real-World Impact</h3>
+        <p style="font-size:.78rem">Bridges the mental health accessibility gap for 970 million underserved people globally</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ╔══════════════════════════════════════════════════╗ -->
+<!-- ║  SLIDE 16 – THANK YOU                            ║ -->
+<!-- ╚══════════════════════════════════════════════════╝ -->
+<section class="slide" id="s16">
+  <div class="orb" style="width:380px;height:380px;background:rgba(167,139,250,.11);top:-100px;left:-60px"></div>
+  <div class="orb" style="width:320px;height:320px;background:rgba(56,189,248,.09);bottom:-80px;right:-50px"></div>
+  <div class="inner" style="align-items:center;text-align:center;gap:22px">
+    <div class="eye">Thank You</div>
+    <h1 style="font-size:clamp(2rem,5vw,3.4rem)">🌿 Mindful<span class="grad"> Companion</span></h1>
+    <p style="max-width:560px;font-size:.96rem">
+      A project born from the belief that technology — when designed with <strong style="color:var(--txt)">empathy at its core</strong> —
+      can be a genuine, accessible force for good in mental health care.
+    </p>
+    <div class="div" style="width:190px"></div>
+    <div class="g3" style="max-width:620px;width:100%">
+      <div class="card" style="text-align:center;padding:14px"><div style="font-size:1.3rem;margin-bottom:5px">🎭</div><p style="font-size:.78rem">Vision AI</p></div>
+      <div class="card" style="text-align:center;padding:14px"><div style="font-size:1.3rem;margin-bottom:5px">🧠</div><p style="font-size:.78rem">Generative AI</p></div>
+      <div class="card" style="text-align:center;padding:14px"><div style="font-size:1.3rem;margin-bottom:5px">❤️</div><p style="font-size:.78rem">Human Empathy</p></div>
+    </div>
+    <blockquote style="max-width:520px;font-size:.92rem">"Synergy between <strong>Vision AI</strong> and <strong>Generative AI</strong> to solve a critical human problem: accessibility to empathetic support."</blockquote>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+      <span class="badge">⚛️ React 18</span><span class="badge">🐍 Flask</span>
+      <span class="badge">✨ Gemini 1.5</span><span class="badge">😊 DeepFace</span>
+      <span class="badge">🔗 LangChain</span><span class="badge">🏗️ Agile</span>
+    </div>
+  </div>
+</section>
+
+</div><!-- /deck -->
+
+<!-- ── CONTROLS ─────────────────────────────────────────── -->
+<div id="controls">
+  <button class="cb" id="prevBtn">&#8592;</button>
+  <div id="dots"></div>
+  <span id="ctr">1 / 16</span>
+  <button class="cb" id="nextBtn">&#8594;</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const ctr = document.getElementById('ctr');
+  const dotsEl = document.getElementById('dots');
+  const total = slides.length;
+  let cur = 0;
+
+  slides.forEach((_,i)=>{
+    const d=document.createElement('div');
+    d.className='dot'+(i===0?' active':'');
+    d.addEventListener('click',()=>goTo(i));
+    dotsEl.appendChild(d);
+  });
+
+  function dots(){return Array.from(dotsEl.querySelectorAll('.dot'))}
+
+  function goTo(n){
+    if(n===cur||n<0||n>=total)return;
+    slides[cur].classList.add('exit-left');
+    slides[cur].classList.remove('active');
+    setTimeout(()=>slides[cur].classList.remove('exit-left'),460);
+    const dir=n>cur?1:-1;
+    cur=n;
+    slides[cur].style.cssText=`transform:translateX(${dir*80}px);opacity:0`;
+    slides[cur].classList.add('active');
+    slides[cur].getBoundingClientRect();
+    slides[cur].style.cssText='';
+    ctr.textContent=`${cur+1} / ${total}`;
+    dots().forEach((d,i)=>d.classList.toggle('active',i===cur));
+  }
+
+  document.getElementById('nextBtn').addEventListener('click',()=>goTo(cur+1));
+  document.getElementById('prevBtn').addEventListener('click',()=>goTo(cur-1));
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key==='ArrowDown')goTo(cur+1);
+    if(e.key==='ArrowLeft'||e.key==='ArrowUp')goTo(cur-1);
+  });
+</script>
+</body>
+</html>

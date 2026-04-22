@@ -4,6 +4,7 @@ import { Heart, TrendingUp, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
+import { useNotifications } from "@/contexts/NotificationsContext";
 
 type MoodEntry = {
   date: string;
@@ -21,6 +22,7 @@ const moodOptions = [
 ];
 
 const MoodTracker = () => {
+  const { addNotification } = useNotifications();
   const [entries, setEntries] = useState<MoodEntry[]>(() => {
     const saved = localStorage.getItem("moodEntries");
     return saved ? JSON.parse(saved) : [];
@@ -44,6 +46,11 @@ const MoodTracker = () => {
     setEntries((prev) => {
       const filtered = prev.filter((e) => e.date !== today);
       return [...filtered, entry].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    addNotification({
+      title: "Mood check-in saved",
+      body: `You logged ${option.label} ${option.emoji} — thanks for taking a moment for yourself.`,
+      type: "success",
     });
   };
 

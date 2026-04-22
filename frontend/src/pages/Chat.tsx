@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { streamAnalyzeAndRespond, quickPrompts } from "@/lib/chatbot";
 import FaceScanner from "@/components/FaceScanner";
+import { useNotifications } from "@/contexts/NotificationsContext";
 
 type Message = {
   id: number;
@@ -15,6 +16,7 @@ type Message = {
 };
 
 const Chat = () => {
+  const { addNotification } = useNotifications();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 0,
@@ -60,7 +62,14 @@ const Chat = () => {
             msg.id === botId ? { ...msg, text: msg.text + chunk } : msg
           ));
         },
-        lastFaceEmotion?.emotion
+        lastFaceEmotion?.emotion,
+        () => {
+          addNotification({
+            title: "Couldn’t reach the chat server",
+            body: "Check your connection or try again in a moment.",
+            type: "warning",
+          });
+        }
       );
       
       setLastFaceEmotion(null); // Clear after use

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/ThemeToggle";
+import NotificationBell from "@/components/NotificationBell";
 import { supabase } from "@/lib/supabase";
 
 const navLinks = [
@@ -105,6 +106,7 @@ const Navbar = () => {
               {link.label}
             </Link>
           ))}
+          <NotificationBell />
           <ThemeToggle />
           {displayName ? (
             <div className="flex items-center gap-2">
@@ -126,6 +128,7 @@ const Navbar = () => {
 
         {/* Mobile toggle */}
         <div className="flex items-center gap-2 md:hidden">
+          <NotificationBell />
           <ThemeToggle />
           <button className="text-foreground" onClick={() => setMobileOpen(!mobileOpen)}>
             {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}

@@ -11,11 +11,31 @@ from collections import defaultdict, deque
 
 try:
     from dotenv import load_dotenv
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
+except ImportError:
+    load_dotenv = None
+
+# Initialize these to None for safety
+ChatOpenAI = None
+ChatGoogleGenerativeAI = None
+ChatPromptTemplate = None
+StrOutputParser = None
+
+try:
     from langchain_openai import ChatOpenAI
+except ImportError:
+    print("[Import Warning] langchain_openai not found.")
+
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError:
+    print("[Import Warning] langchain_google_genai not found.")
+
+try:
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
-except Exception:
-    load_dotenv = None
+except ImportError:
+    print("[Import Warning] langchain_core not found.")
 
 try:
     IMPORT_ERROR = None
@@ -43,11 +63,6 @@ except Exception as e:
 
 app = Flask(__name__)
 CORS(app)
-
-if load_dotenv:
-    # Load from this backend folder regardless of the current working directory.
-    # override=True makes sure updates to backend/.env take effect after reloads.
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 # --- Configuration & Model Loader ---
 # Define your 3 models here. 
@@ -129,8 +144,10 @@ class ModelManager:
         self.conversation_memory = defaultdict(lambda: deque(maxlen=self.memory_turns))
         self.openai_chat = None
         self.github_chat = None
+        self.gemini_chat = None
         self._init_openai()
         self._init_github_models()
+        self._init_gemini()
         self._init_huggingface()
 
     def _non_mental_health_redirect(self, raw_message: str):
@@ -194,6 +211,23 @@ class ModelManager:
                 print("[OpenAI] Initialized successfully.")
             except:
                 self.openai_chat = None
+
+    def _init_gemini(self):
+        gemini_key = os.environ.get("GEMINI_API_KEY")
+        gemini_model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+        if gemini_key:
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                print(f"[Gemini] Initializing {gemini_model}...")
+                self.gemini_chat = ChatGoogleGenerativeAI(
+                    model=gemini_model,
+                    google_api_key=gemini_key,
+                    temperature=0.7,
+                )
+                print("[Gemini] Initialized successfully.")
+            except Exception as e:
+                print(f"[Gemini] Init failed: {e}")
+                self.gemini_chat = None
 
     def _init_github_models(self):
         # GitHub PAT used as an API key for GitHub Models
@@ -592,7 +626,7 @@ class ModelManager:
 
         # 3. Try Gemini fallback if match is weak, else use pure heuristic/JSON
         result = self.heuristic_model.analyze(message)
-        # 1. Attempt GitHub Models (Primary - New!)
+        # 1. Attempt GitHub Models (Primary)
         if self.github_chat:
             try:
                 recent_turns = self._get_recent_context(session_id)
@@ -607,49 +641,8 @@ class ModelManager:
                     result["model"] = "github-models-gpt4o"
                     self._store_turn(session_id, "assistant", result["response"])
                     return result
-            except:
-                pass # Fall to OpenAI
-
-        # 2. Attempt OpenAI (Legacy)
-        if self.openai_chat:
-            try:
-                recent_turns = self._get_recent_context(session_id)
-                prompt = ChatPromptTemplate.from_messages([
-                    ("system", "You are MindfulChat, a world-class empathetic wellness friend. 1-2 sentences."),
-                    ("human", f"Recent History:\n{{history}}\n\nUser: {{message}} (Visual Emotion: {detected_emotion if detected_emotion else 'Not detected'})"),
-                ])
-                chain = prompt | self.openai_chat | StrOutputParser()
-                resp = chain.invoke({"history": recent_turns, "message": raw_message})
-                if resp:
-                    result["response"] = resp.strip()
-                    result["model"] = "openai-gpt4o"
-                    self._store_turn(session_id, "assistant", result["response"])
-                    return result
-            except:
-                pass # Fail to HF
-
-        # 2. Attempt Hugging Face (Direct Fallback)
-        hf_key = os.environ.get("HUGGINGFACE_API_KEY")
-        if hf_key:
-            try:
-                hf_model = os.environ.get("HUGGINGFACE_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
-                prompt = f"Expert Supporter: You are MindfulChat. Focus on empathy. 1-2 sentences.\n\nUser: {raw_message}\nMindfulChat:"
-                hf_resp = requests.post(
-                    f"https://api-inference.huggingface.co/models/{hf_model}",
-                    headers={"Authorization": f"Bearer {hf_key}"},
-                    json={"inputs": prompt, "parameters": {"max_new_tokens": 150, "return_full_text": False}},
-                    timeout=6
-                )
-                if hf_resp.status_code == 200:
-                    data = hf_resp.json()
-                    text = data[0].get("generated_text", "") if isinstance(data, list) else data.get("generated_text", "")
-                    if text:
-                        clean_text = text.split("MindfulChat:")[-1].strip()
-                        result["response"] = clean_text
-                        result["model"] = "huggingface-direct"
-                        self._store_turn(session_id, "assistant", result["response"])
-                        return result
-            except:
+            except Exception as e:
+                print(f"[GitHub] Request failed: {e}")
                 pass
 
         # 3. Dataset Lookup (Instant Fallback)
@@ -818,7 +811,8 @@ def chat_stream():
         return jsonify({"error": "No message provided"}), 400
 
     session_id = data.get("session_id", "default")
-    raw_message = data['message'].strip()
+    raw_message = data.get('message', '').strip()
+    print(f"[Chat] Incoming stream request from {session_id}: {raw_message[:50]}...")
     message = raw_message.lower()
 
     # 1. Store user message
@@ -872,6 +866,7 @@ def chat_stream():
 
     def generate():
         # Send metadata first
+        print(f"[Chat] Sending meta: {emotion_text} {emoji_text}")
         yield f"data: {json.dumps({'type': 'meta', 'emotion': emotion_text, 'emoji': emoji_text})}\n\n"
         
         # 1. Try GitHub Models Stream
@@ -891,51 +886,8 @@ def chat_stream():
                 yield "data: [DONE]\n\n"
                 model_manager._store_turn(session_id, "assistant", full_resp)
                 return
-            except:
-                pass
-
-        # 2. Try OpenAI Stream
-        if model_manager.openai_chat:
-            try:
-                recent_turns = model_manager._get_recent_context(session_id)
-                prompt = ChatPromptTemplate.from_messages([
-                    ("system", "You are MindfulChat, a warm world-class empathetic friend. 1-2 sentences."),
-                    ("human", f"History:\n{{history}}\n\nUser: {{message}} (Visual Emotion: {detected_emotion if detected_emotion else 'Not detected'})"),
-                ])
-                chain = prompt | model_manager.openai_chat | StrOutputParser()
-                full_resp = ""
-                for chunk in chain.stream({"history": recent_turns, "message": raw_message}):
-                    if chunk:
-                        full_resp += chunk
-                        yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
-                yield "data: [DONE]\n\n"
-                model_manager._store_turn(session_id, "assistant", full_resp)
-                return
-            except:
-                pass
-
-        # Try Hugging Face (Direct Fallback)
-        hf_key = os.environ.get("HUGGINGFACE_API_KEY")
-        if hf_key:
-            try:
-                hf_model = os.environ.get("HUGGINGFACE_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
-                prompt = f"Expert Supporter: You are MindfulChat. Focus on empathy. 1-2 sentences.\n\nUser: {raw_message}\nMindfulChat:"
-                hf_resp = requests.post(
-                    f"https://api-inference.huggingface.co/models/{hf_model}",
-                    headers={"Authorization": f"Bearer {hf_key}"},
-                    json={"inputs": prompt, "parameters": {"max_new_tokens": 150, "return_full_text": False}},
-                    timeout=6
-                )
-                if hf_resp.status_code == 200:
-                    data = hf_resp.json()
-                    text = data[0].get("generated_text", "") if isinstance(data, list) else data.get("generated_text", "")
-                    if text:
-                        clean_text = text.split("MindfulChat:")[-1].strip()
-                        yield f"data: {json.dumps({'type': 'chunk', 'text': clean_text})}\n\n"
-                        yield "data: [DONE]\n\n"
-                        model_manager._store_turn(session_id, "assistant", clean_text)
-                        return
-            except:
+            except Exception as e:
+                print(f"[GitHub] Stream failed: {e}")
                 pass
 
         # Dataset Lookup (Fallback)
@@ -957,17 +909,15 @@ def chat_stream():
 @app.route('/models', methods=['GET'])
 def models_status():
     """Check the status/readiness of the 3 models."""
-    if model_manager.langchain_chat and model_manager.langchain_error:
-        model_3_status = f"LangChain Gemini (Loaded, runtime warning: {model_manager.langchain_error})"
-    elif model_manager.langchain_chat:
+    if model_manager.gemini_chat:
         model_3_status = "LangChain Gemini (Loaded)"
     else:
-        model_3_status = f"LangChain Gemini (Not Loaded: {model_manager.langchain_error or 'not configured'})"
+        model_3_status = "LangChain Gemini (Not Loaded)"
 
     return jsonify({
-        "model_1": "Heuristic (Active)",
-        "model_2": "ML Classifier (Loaded)" if model_manager.ml_model else f"ML Classifier (Not Loaded: {model_manager.ml_model_error or 'missing file'})",
-        "model_3": model_3_status
+        "model_1": "Heuristic/Dataset (Active)",
+        "model_2": "ML Classifier (Loaded)" if model_manager.ml_model else "ML Classifier (Not Loaded)",
+        "model_3": "GitHub Models GPT-4o (Active)" if model_manager.github_chat else "GitHub Models GPT-4o (Not Configured)"
     })
 
 
