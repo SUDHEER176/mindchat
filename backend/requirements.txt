@@ -18,5 +18,5 @@ python-dotenv
 gunicorn
 tensorflow
 deepface
-opencv-python-headless
+opencv-python
 tf-keras

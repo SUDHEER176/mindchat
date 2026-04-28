@@ -108,7 +108,7 @@ export async function analyzeAndRespond(message: string, detectedEmotion?: strin
 
 export async function streamAnalyzeAndRespond(
   message: string,
-  onMeta: (emotion: string, emoji: string) => void,
+  onMeta: (emotion: string, emoji: string, action?: string) => void,
   onChunk: (chunk: string) => void,
   detectedEmotion?: string,
   onStreamError?: () => void
@@ -149,7 +149,7 @@ export async function streamAnalyzeAndRespond(
           try {
             const data = JSON.parse(dataStr);
             if (data.type === 'meta') {
-              onMeta(data.emotion, data.emoji);
+              onMeta(data.emotion, data.emoji, data.action);
             } else if (data.type === 'chunk') {
               onChunk(data.text);
             }

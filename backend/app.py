@@ -59,6 +59,7 @@ try:
     print("[FaceAI] DeepFace loaded successfully.")
 except Exception as e:
     DEEPFACE_AVAILABLE = False
+    DEEPFACE_ERROR = str(e)
     print(f"[FaceAI] DeepFace not available: {e}")
 
 app = Flask(__name__)
@@ -567,7 +568,8 @@ class ModelManager:
                     "If you can, contact a trusted person nearby and stay with them. "
                     "If you are in the U.S./Canada, call or text 988 for the Suicide & Crisis Lifeline."
                 ),
-                "model": "safety"
+                "model": "safety",
+                "action": "show_map"
             }
         return None
 
@@ -839,7 +841,10 @@ def chat_stream():
     safety_result = model_manager._safety_override(raw_message)
     if safety_result:
         def safety_gen():
-            yield f"data: {json.dumps({'type': 'meta', 'emotion': safety_result['emotion'], 'emoji': safety_result['emoji']})}\n\n"
+            meta_data = {'type': 'meta', 'emotion': safety_result['emotion'], 'emoji': safety_result['emoji']}
+            if 'action' in safety_result:
+                meta_data['action'] = safety_result['action']
+            yield f"data: {json.dumps(meta_data)}\n\n"
             yield f"data: {json.dumps({'type': 'chunk', 'text': safety_result['response']})}\n\n"
             yield "data: [DONE]\n\n"
         model_manager._store_turn(session_id, "assistant", safety_result['response'])
@@ -864,10 +869,17 @@ def chat_stream():
         emotion_text = ml_result.get("emotion", "Neutral")
         emoji_text = ml_result.get("emoji", "🤔")
 
+    action = None
+    if emotion_text in ["Anxiety", "Stress"]:
+        action = "breathing_exercise"
+
     def generate():
         # Send metadata first
-        print(f"[Chat] Sending meta: {emotion_text} {emoji_text}")
-        yield f"data: {json.dumps({'type': 'meta', 'emotion': emotion_text, 'emoji': emoji_text})}\n\n"
+        print(f"[Chat] Sending meta: {emotion_text} {emoji_text} {action}")
+        meta_data = {'type': 'meta', 'emotion': emotion_text, 'emoji': emoji_text}
+        if action:
+            meta_data['action'] = action
+        yield f"data: {json.dumps(meta_data)}\n\n"
         
         # 1. Try GitHub Models Stream
         if model_manager.github_chat:
@@ -1013,7 +1025,7 @@ def analyze_face():
         return response, 204
 
     if not DEEPFACE_AVAILABLE:
-        resp = jsonify({'error': 'DeepFace not available on this server.'})
+        resp = jsonify({'error': f'DeepFace not available on this server. Reason: {DEEPFACE_ERROR}'})
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp, 503
 

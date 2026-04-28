@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Sparkles } from "lucide-react";
+import { Send, Bot, User, Sparkles, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { streamAnalyzeAndRespond, quickPrompts } from "@/lib/chatbot";
@@ -13,6 +13,62 @@ type Message = {
   text: string;
   emotion?: string;
   emoji?: string;
+  action?: string;
+};
+
+const BreathingExercise = () => {
+  const [phase, setPhase] = useState<"Breathe In" | "Hold" | "Breathe Out">("Breathe In");
+
+  useEffect(() => {
+    let timeout1: NodeJS.Timeout, timeout2: NodeJS.Timeout, timeout3: NodeJS.Timeout;
+
+    const runCycle = () => {
+      setPhase("Breathe In");
+      timeout1 = setTimeout(() => {
+        setPhase("Hold");
+        timeout2 = setTimeout(() => {
+          setPhase("Breathe Out");
+          timeout3 = setTimeout(runCycle, 5000);
+        }, 3000);
+      }, 4000);
+    };
+
+    runCycle();
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+      clearTimeout(timeout3);
+    };
+  }, []);
+
+  return (
+    <div className="my-4 flex flex-col items-center justify-center p-6 bg-primary/5 rounded-2xl border border-primary/10">
+      <div className="relative w-32 h-32 flex items-center justify-center mb-4">
+        <motion.div
+          animate={{
+            scale: phase === "Breathe In" ? 1.5 : phase === "Breathe Out" ? 1 : 1.5,
+            opacity: phase === "Hold" ? 0.8 : 0.5,
+          }}
+          transition={{ duration: phase === "Breathe In" ? 4 : phase === "Breathe Out" ? 5 : 3, ease: "easeInOut" }}
+          className="absolute inset-0 rounded-full bg-primary/20"
+        />
+        <motion.div
+          animate={{
+            scale: phase === "Breathe In" ? 1.2 : phase === "Breathe Out" ? 1 : 1.2,
+          }}
+          transition={{ duration: phase === "Breathe In" ? 4 : phase === "Breathe Out" ? 5 : 3, ease: "easeInOut" }}
+          className="absolute w-20 h-20 rounded-full bg-primary/40 flex items-center justify-center shadow-lg"
+        >
+          <span className="text-primary-foreground font-medium text-sm text-center px-2">
+            {phase}
+          </span>
+        </motion.div>
+      </div>
+      <p className="text-xs text-muted-foreground text-center max-w-[200px]">
+        Follow the circle to slow your heart rate and ground yourself.
+      </p>
+    </div>
+  );
 };
 
 const Chat = () => {
@@ -50,10 +106,10 @@ const Chat = () => {
       
       await streamAnalyzeAndRespond(
         text,
-        (emotion, emoji) => {
+        (emotion, emoji, action) => {
           setIsTyping(false); // Stop typing loader when we get meta
           setMessages((prev) => prev.map(msg => 
-            msg.id === botId ? { ...msg, emotion, emoji } : msg
+            msg.id === botId ? { ...msg, emotion, emoji, action } : msg
           ));
         },
         (chunk) => {
@@ -137,6 +193,19 @@ const Chat = () => {
                     </span>
                   )} */}
                   <p>{msg.text}</p>
+                  {msg.action === "show_map" && (
+                    <div className="mt-3">
+                      <Button 
+                        onClick={() => window.open("https://www.google.com/maps/search/mental+health+clinic+near+me", "_blank")}
+                        className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center gap-2"
+                        size="sm"
+                      >
+                        <MapPin className="w-4 h-4" />
+                        Find Nearby Clinics
+                      </Button>
+                    </div>
+                  )}
+                  {msg.action === "breathing_exercise" && <BreathingExercise />}
                 </div>
                 {msg.role === "user" && (
                   <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 mt-1">
